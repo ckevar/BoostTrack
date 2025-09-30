@@ -29,6 +29,23 @@ from fast_reid.fastreid.utils.env import seed_all_rng
 from fast_reid.fastreid.utils.events import CommonMetricPrinter, JSONWriter, TensorboardXWriter
 from fast_reid.fastreid.utils.file_io import PathManager
 from fast_reid.fastreid.utils.logger import setup_logger
+"""
+# New
+from fastreid.data import build_reid_test_loader, build_reid_train_loader
+from fastreid.evaluation import (ReidEvaluator,
+                       inference_on_dataset, print_csv_format)
+from fastreid.modeling.meta_arch import build_model
+from fastreid.solver import build_lr_scheduler, build_optimizer
+from fastreid.utils import comm
+from fastreid.utils.checkpoint import Checkpointer
+from fastreid.utils.collect_env import collect_env_info
+from fastreid.utils.env import seed_all_rng
+from fastreid.utils.events import CommonMetricPrinter, JSONWriter, TensorboardXWriter
+from fastreid.utils.file_io import PathManager
+from fastreid.utils.logger import setup_logger
+# End New
+"""
+
 from . import hooks
 from .train_loop import TrainerBase, AMPTrainer, SimpleTrainer
 

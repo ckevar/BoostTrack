@@ -12,6 +12,11 @@ from collections import OrderedDict
 import torch
 
 from fast_reid.fastreid.utils import comm
+""" 
+# New
+from fastreid.utils import comm
+# End New
+"""
 from .evaluator import DatasetEvaluator
 
 logger = logging.getLogger(__name__)

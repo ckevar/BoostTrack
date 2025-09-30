@@ -100,7 +100,7 @@ def main():
 
         if pred is None:
             continue
-        # Nx5 of (x1, y1, x2, y2, ID)
+        # Nx5 of (x1, y1, x2, y2, score)
         targets = tracker.update(pred, img, np_img[0].numpy(), tag)
         tlwhs, ids, confs = utils.filter_targets(targets, GeneralSettings['aspect_ratio_thresh'], GeneralSettings['min_box_area'])
 

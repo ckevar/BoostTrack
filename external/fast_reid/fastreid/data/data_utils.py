@@ -12,6 +12,11 @@ import queue
 from torch.utils.data import DataLoader
 
 from fast_reid.fastreid.utils.file_io import PathManager
+"""
+# New
+from fastreid.utils.file_io import PathManager
+# END New
+"""
 
 
 def read_image(file_name, format=None):

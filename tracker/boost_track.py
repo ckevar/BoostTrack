@@ -145,9 +145,10 @@ class BoostTrack(object):
         self.use_rich_s = BoostTrackPlusPlusSettings['use_rich_s']
         self.use_sb = BoostTrackPlusPlusSettings['use_sb']
         self.use_vt = BoostTrackPlusPlusSettings['use_vt']
-
+        
         if GeneralSettings['use_embedding']:
             self.embedder = EmbeddingComputer(GeneralSettings['dataset'], GeneralSettings['test_dataset'], True)
+
         else:
             self.embedder = None
 
@@ -155,15 +156,12 @@ class BoostTrack(object):
             self.ecc = ECC(scale=350, video_name=video_name, use_cache=True)
         else:
             self.ecc = None
+    def load_feature_extractor(self, feature_extractor_path, feature_extractor_cfg):
+        if not (self.embedder is None):
+            self.embedder.load(feature_extractor_path,
+                               feature_extractor_cfg)
 
-    def update(self, dets, img_tensor, img_numpy, tag):
-        """
-        Params:
-          dets - a numpy array of detections in the format [[x1,y1,x2,y2,score],[x1,y1,x2,y2,score],...]
-        Requires: this method must be called once for each frame even with empty detections (use np.empty((0, 5)) for frames without detections).
-        Returns the a similar array, where the last column is the object ID.
-        NOTE: The number of objects returned may differ from the number of detections provided.
-        """
+    def update_no_scale(self, dets, img_numpy, tag):
         if dets is None:
             return np.empty((0, 5))
         if not isinstance(dets, np.ndarray):
@@ -171,11 +169,7 @@ class BoostTrack(object):
 
         self.frame_count += 1
 
-        # Rescale
-        scale = min(img_tensor.shape[2] / img_numpy.shape[0], img_tensor.shape[3] / img_numpy.shape[1])
-        dets = deepcopy(dets)
-        dets[:, :4] /= scale
-
+        # Camera Motion Compensation is Enabled
         if self.ecc is not None:
             transform = self.ecc(img_numpy, self.frame_count, tag)
             for trk in self.trackers:
@@ -195,7 +189,7 @@ class BoostTrack(object):
 
         if self.use_duo_boost:
             dets = self.duo_confidence_boost(dets)
-
+        
         remain_inds = dets[:, 4] >= self.det_thresh
         dets = dets[remain_inds]
         scores = dets[:, 4]
@@ -203,13 +197,13 @@ class BoostTrack(object):
         # Generate embeddings
         dets_embs = np.ones((dets.shape[0], 1))
         emb_cost = None
-        if self.embedder and dets.size > 0:
+        if self.embedder and dets.shape[0] > 0:
             dets_embs = self.embedder.compute_embedding(img_numpy, dets[:, :4], tag)
             trk_embs = []
             for t in range(len(self.trackers)):
                 trk_embs.append(self.trackers[t].get_emb())
             trk_embs = np.array(trk_embs)
-            if trk_embs.size > 0 and dets.size > 0:
+            if trk_embs.size > 0 and dets.shape[0] > 0:
                 emb_cost = dets_embs.reshape(dets_embs.shape[0], -1) @ trk_embs.reshape((trk_embs.shape[0], -1)).T
         emb_cost = None if self.embedder is None else emb_cost
 
@@ -254,6 +248,30 @@ class BoostTrack(object):
             return np.concatenate(ret)
         return np.empty((0, 5))
 
+
+
+    def update(self, dets, img_tensor, img_numpy, tag):
+        """
+        Params:
+          dets - a numpy array of detections in the format [[x1,y1,x2,y2,score],[x1,y1,x2,y2,score],...]
+        Requires: this method must be called once for each frame even with empty detections (use np.empty((0, 5)) for frames without detections). NOTE: img_tensor and img_numpy required ONLY to scale the detections. The `update_no_scale` function, only calls for the raw image in numpy array in order to compute the embeddings.
+        Returns the a similar array, where the last column is the object ID.
+        NOTE: The number of objects returned may differ from the number of detections provided.
+        """
+        if dets is None:
+            return np.empty((0, 5))
+        if not isinstance(dets, np.ndarray):
+            dets = dets.cpu().detach().numpy()
+
+        self.frame_count += 1
+
+        # Rescale
+        scale = min(img_tensor.shape[2] / img_numpy.shape[0], img_tensor.shape[3] / img_numpy.shape[1])
+        dets = deepcopy(dets)
+        dets[:, :4] /= scale
+
+        self.update_no_scale(dets, img_numpy, tag)
+
     def dump_cache(self):
         if self.ecc is not None:
             self.ecc.save_cache()
@@ -290,7 +308,6 @@ class BoostTrack(object):
 
         if mahalanobis_distance.size > 0 and self.frame_count > 1:
             min_mh_dists = mahalanobis_distance.min(1)
-
             mask = (min_mh_dists > limit) & (detections[:, 4] < self.det_thresh)
             boost_detections = detections[mask]
             boost_detections_args = np.argwhere(mask).reshape((-1,))

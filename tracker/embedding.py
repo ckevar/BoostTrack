@@ -148,7 +148,7 @@ class EmbeddingComputer:
         embs = []
         for idx in range(0, len(crops), self.max_batch):
             batch_crops = crops[idx : idx + self.max_batch]
-            batch_crops = batch_crops.cuda()
+            batch_crops = batch_crops.to("cuda")
             with torch.no_grad():
                 batch_embs = self.model(batch_crops)
             embs.extend(batch_embs)
@@ -161,6 +161,12 @@ class EmbeddingComputer:
 
         self.cache[tag] = embs
         return embs
+    
+    def load(self, model_path, cfg_file=None):
+        model = FastReID(model_path, cfg_file)
+        model.eval()
+        model.cuda()
+        self.model = model.half().to("cuda")
 
     def initialize_model(self):
         if self.dataset == "mot17":
@@ -178,11 +184,7 @@ class EmbeddingComputer:
         else:
             raise RuntimeError("Need the path for a new ReID model.")
 
-        model = FastReID(path)
-        model.eval()
-        model.cuda()
-        model.half()
-        self.model = model
+        self.load(path)
 
     def _get_general_model(self):
         """Used for the half-val for MOT17/20.

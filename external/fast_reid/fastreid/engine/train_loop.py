@@ -16,6 +16,12 @@ from torch.nn.parallel import DataParallel, DistributedDataParallel
 import fast_reid.fastreid.utils.comm as comm
 from fast_reid.fastreid.utils.events import EventStorage, get_event_storage
 from fast_reid.fastreid.utils.params import ContiguousParams
+"""
+# New
+import fastreid.utils.comm as comm
+from fastreid.utils.events import EventStorage, get_event_storage
+from fastreid.utils.params import ContiguousParams
+"""
 
 __all__ = ["HookBase", "TrainerBase", "SimpleTrainer"]
 

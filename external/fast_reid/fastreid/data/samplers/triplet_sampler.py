@@ -13,7 +13,11 @@ import numpy as np
 from torch.utils.data.sampler import Sampler
 
 from fast_reid.fastreid.utils import comm
-
+"""
+# New
+from fastreid.utils import comm
+# End New
+"""
 
 def no_index(a, b):
     assert isinstance(a, list)

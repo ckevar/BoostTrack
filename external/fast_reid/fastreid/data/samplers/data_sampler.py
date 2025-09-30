@@ -10,6 +10,11 @@ import numpy as np
 from torch.utils.data import Sampler
 
 from fast_reid.fastreid.utils import comm
+"""
+# New
+from fastreid.utils import comm
+# END New
+"""
 
 
 class TrainingSampler(Sampler):

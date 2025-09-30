@@ -9,10 +9,22 @@ import os
 
 import torch
 from torch._six import string_classes
+""" Legacy
 from collections import Mapping
+"""
+# New
+from collections.abc import Mapping
+#
 
 from fast_reid.fastreid.config import configurable
 from fast_reid.fastreid.utils import comm
+"""
+# New
+from fastreid.config import configurable
+from fastreid.utils import comm
+# End new
+"""
+
 from . import samplers
 from .common import CommDataset
 from .data_utils import DataLoaderX

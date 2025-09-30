@@ -17,6 +17,12 @@ import torch
 
 from fast_reid.fastreid.config import CfgNode
 from fast_reid.fastreid.utils.params import ContiguousParams
+"""
+# New
+from fastreid.config import CfgNode
+from fastreid.utils.params import ContiguousParams
+# END New
+"""
 from . import lr_scheduler
 
 _GradientClipperInput = Union[torch.Tensor, Iterable[torch.Tensor]]

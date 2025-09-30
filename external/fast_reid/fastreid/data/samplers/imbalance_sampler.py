@@ -16,7 +16,11 @@ import torch
 from torch.utils.data.sampler import Sampler
 
 from fast_reid.fastreid.utils import comm
-
+"""
+# New
+from fastreid.utils import comm
+# End NEW
+"""
 
 class ImbalancedDatasetSampler(Sampler):
     """Samples elements randomly from a given list of indices for imbalanced dataset

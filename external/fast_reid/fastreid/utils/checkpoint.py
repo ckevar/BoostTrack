@@ -15,7 +15,11 @@ from termcolor import colored
 from torch.nn.parallel import DistributedDataParallel, DataParallel
 
 from fast_reid.fastreid.utils.file_io import PathManager
-
+"""
+# New
+from fastreid.utils.file_io import PathManager
+# END New
+"""
 
 class _IncompatibleKeys(
     NamedTuple(

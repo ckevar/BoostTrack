@@ -2,7 +2,13 @@
 import logging
 import pprint
 import sys
+""" Legacy
 from collections import Mapping, OrderedDict
+"""
+# New
+from collections.abc import Mapping
+from collections import OrderedDict
+# End NEW
 
 import numpy as np
 from tabulate import tabulate
