@@ -41,6 +41,15 @@ def process_txt(root, txt_file, pid2label):
 
     return data
 
+def sanitize_data(data):
+    sanitized = []
+    for i, (img_path, pid, camid) in enumerate(data):
+        if pid is None:
+            print(f"Skipping invalid PID at {img_path}")
+            continue
+        sanitized.append((img_path, pid, camid))
+    return sanitized
+
 @DATASET_REGISTRY.register()
 class MulticlassMOT17(ImageDataset):
     dataset_dir = "/home/chris/Documents/Datasets/reid/fastreid/mot17re_set"
@@ -57,5 +66,19 @@ class MulticlassMOT17(ImageDataset):
         train   = process_txt(self.root, train_txt, pid2label)
         query   = process_txt(self.root, query_txt, pid2label)
         gallery = process_txt(self.root, gallery_txt, pid2label)
+
+        gallery_pids = set(pid for _, pid, _ in gallery)
+        filtered_query = []
+        for item in query:
+            if item[1] in gallery_pids:
+                filtered_query.append(item)
+            else:
+                print(f"Query PID {item[1]} has no gallery match, skipping")
+                exit(1)
+        query = filtered_query
+
+        assert len(train) > 0
+        assert len(query) > 0
+        assert len(gallery) > 0
 
         super().__init__(train, query, gallery, **kwargs)
