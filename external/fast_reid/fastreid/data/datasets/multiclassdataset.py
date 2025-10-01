@@ -82,3 +82,7 @@ class MulticlassMOT17(ImageDataset):
         assert len(gallery) > 0
 
         super().__init__(train, query, gallery, **kwargs)
+
+        print("Sample from train:", train[0])
+        print("Sample from query:", query[0])
+        print("Sample from gallery:", gallery[0])
