@@ -46,7 +46,7 @@ class ReidEvaluator(DatasetEvaluator):
 
     def process(self, inputs, outputs):
         if inputs is None or inputs.get("targets") is None:
-            raise ValueError(f"Got None targets in input batch: {input}")
+            raise ValueError(f"Got None targets in input batch: {inputs}")
         prediction = {
             'feats': outputs.to(self._cpu_device, torch.float32),
             'pids': inputs['targets'].to(self._cpu_device),
