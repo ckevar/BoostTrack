@@ -9,7 +9,8 @@ def build_pid_map(root_dir, txt_files):
         data = np.load("pid_map.npz")
         pids = data["pids"]
         labels = data["labels"]
-        return {pid: label for pid, label in zip(pids, labels)}
+        # It's important to cast pid into int rather than keeping them into np type
+        return {int(pid): int(label) for pid, label in zip(pids, labels)}
 
     all_pids = set()
     for txt in txt_files:
