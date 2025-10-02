@@ -195,6 +195,8 @@ def evaluate_rank(
             by more than 10x. This requires Cython to be installed.
     """
     if use_cython and IS_CYTHON_AVAI:
+        print("rank eval using cython")
         return evaluate_cy(distmat, q_pids, g_pids, q_camids, g_camids, max_rank, use_metric_cuhk03)
     else:
+        print("rank eval with no cython")
         return evaluate_py(distmat, q_pids, g_pids, q_camids, g_camids, max_rank, use_metric_cuhk03)

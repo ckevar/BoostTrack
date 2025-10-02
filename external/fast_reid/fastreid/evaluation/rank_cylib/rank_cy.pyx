@@ -182,7 +182,6 @@ cpdef eval_market1501_cy(float[:,:] distmat, long[:] q_pids, long[:]g_pids,
         float[:] tmp_cmc = np.zeros(num_g, dtype=np.float32)
         float tmp_cmc_sum
 
-
     for q_idx in range(num_q):
         # get query pid and camid
         q_pid = q_pids[q_idx]
@@ -196,7 +195,14 @@ cpdef eval_market1501_cy(float[:,:] distmat, long[:] q_pids, long[:]g_pids,
 
         # remove gallery samples that have the same pid and camid with query
         for g_idx in range(num_g):
+            """ Legacy: Multicamera, it only includes same id an different cameras, this is because
+            the same camera in the query used to be any image from the gallery but cropped. In the
+            cases of single camera, the image patches in the query and in the gallery are different 
+            things, it's not a cropped version of the gallery.
             if (g_pids[order[g_idx]] != q_pid) or (g_camids[order[g_idx]] != q_camid):
+            """
+            # New: Single Camera
+            if True:
                 raw_cmc[num_g_real] = matches[g_idx]
                 num_g_real += 1
                 # this condition is true if query appear in gallery
