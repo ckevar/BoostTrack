@@ -13,5 +13,10 @@ DATALOADER:
 
 SOLVER:
   IMS_PER_BATCH: 32
+  AMP:
+    ENABLED: False
 
-OUTPUT_DIR: logs/MOT17/sbs_S50
+TEST:
+  EVAL_PERIOD: 1
+
+OUTPUT_DIR: logs/MulticlassMOT17/sbs_S50
