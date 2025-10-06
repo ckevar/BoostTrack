@@ -285,7 +285,7 @@ def init_pretrained_weights(key):
     comm.synchronize()
 
     logger.info(f"Loading pretrained model from {cached_file}")
-    state_dict = torch.load(cached_file, map_location=torch.device('cpu'))
+    state_dict = torch.load(cached_file, map_location=torch.device('cpu'), weights_only=False)
 
     return state_dict
 
