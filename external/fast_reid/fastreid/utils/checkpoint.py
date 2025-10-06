@@ -218,7 +218,10 @@ class Checkpointer(object):
                 the checkpointer dict["model"] must be a dict which maps strings
                 to torch.Tensor or numpy arrays.
         """
-        return torch.load(f, map_location=torch.device("cpu"))
+        # Legacy:
+        #return torch.load(f, map_location=torch.device("cpu"))
+        # New pytorch 2.6
+        return torch.load(f, map_location=torch.device("cpu"), weights_only=False)
 
     def _load_model(self, checkpoint: Any):
         """
