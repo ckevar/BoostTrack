@@ -1,14 +1,15 @@
 import torch
 
-""" Legacy:
+""" Legacy: """
 from fast_reid.fastreid.config import get_cfg
 from fast_reid.fastreid.modeling.meta_arch import build_model
 from fast_reid.fastreid.utils.checkpoint import Checkpointer
-"""
 
+"""
 from fastreid.config import get_cfg
 from fastreid.modeling.meta_arch import build_model
 from fastreid.utils.checkpoint import Checkpointer
+"""
 
 def setup_cfg(config_file, opts):
     # load config from file and command-line arguments

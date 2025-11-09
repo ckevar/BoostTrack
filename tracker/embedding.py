@@ -6,7 +6,7 @@ import pickle
 import torch
 import cv2
 import torchvision
-import torchreid
+#import torchreid
 import numpy as np
 
 from external.adaptors.fastreid_adaptor import FastReID

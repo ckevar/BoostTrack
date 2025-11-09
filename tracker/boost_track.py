@@ -145,21 +145,74 @@ class BoostTrack(object):
         self.use_rich_s = BoostTrackPlusPlusSettings['use_rich_s']
         self.use_sb = BoostTrackPlusPlusSettings['use_sb']
         self.use_vt = BoostTrackPlusPlusSettings['use_vt']
-        
+
+        self.embedder = None
         if GeneralSettings['use_embedding']:
             self.embedder = EmbeddingComputer(GeneralSettings['dataset'], GeneralSettings['test_dataset'], True)
-
-        else:
-            self.embedder = None
-
+        
+        self.ecc = None
         if GeneralSettings['use_ecc']:
             self.ecc = ECC(scale=350, video_name=video_name, use_cache=True)
+
+    def load_feature_extractor(self, feature_extractor_path, feature_extractor_cfg, model_type="fastreid"):
+        if self.embedder is None:
+            return
+        
+        if "fastreid" == model_type:
+           self.embedder.load(feature_extractor_path,
+              feature_extractor_cfg)
+
+        elif "wrn" == model_type:
+            import sys
+            ext_dir = __file__.split("/")[:-1]
+            ext_dir = '/'.join(ext_dir)
+            ext_dir = f"{ext_dir}/../../deep_sort/"
+            sys.path.append(ext_dir)
+            ext_dir = f"{ext_dir}/tools/"
+            sys.path.append(ext_dir)
+            from generate_torch_detections import create_box_encoder
+
+            if "mot17" in feature_extractor_path: train_ids = 388
+            elif "kitti" in feature_extractor_path: train_ids = 450
+            elif "waymo" in feature_extractor_path: train_ids = 20982 # This might be later modified
+            else: raise ValueError(f"Model {feature_extractor_file} not supported, unknow train_ids.\n")
+            self.embedder = create_box_encoder(feature_extractor_path, train_ids, batch_size=32)
+
         else:
-            self.ecc = None
-    def load_feature_extractor(self, feature_extractor_path, feature_extractor_cfg):
-        if not (self.embedder is None):
-            self.embedder.load(feature_extractor_path,
-                               feature_extractor_cfg)
+            raise ValueError(f"Model type {model_type} not supported. Only `fastreid` or `wrn`.")
+
+    def __generate_embeddings(self, img_numpy, dets, tag):
+        dets_sz = dets.shape[0]
+
+        if dets_sz == 0:
+            return None, np.ones((0, 1))
+
+        if self.embedder is None:
+            return None, np.ones((dets_sz, 1))
+
+        # Get Detection Features
+        if isinstance(self.embedder, EmbeddingComputer): # if FastReID
+            dets_embs = self.embedder.compute_embedding(img_numpy, dets[:, :4], tag)
+
+        else:   # if Wide Residual Network
+            ltwh = dets[:, :4]
+            ltwh[:, 2:] = ltwh[:, 2:] - ltwh[:, :2]
+            dets_embs = self.embedder(img_numpy, ltwh)
+            dets_embs = dets_embs.numpy()
+
+        # Get Track features
+        trk_embs = []
+        for t in range(len(self.trackers)):
+            trk_embs.append(self.trackers[t].get_emb())
+        trk_embs = np.array(trk_embs)
+
+        # Compute Cost
+        if 0 == trk_embs.size:
+            return None, dets_embs
+
+        emb_cost = dets_embs.reshape(dets_embs.shape[0], -1) @ trk_embs.reshape((trk_embs.shape[0], -1)).T
+
+        return  emb_cost, dets_embs
 
     def update_no_scale(self, dets, img_numpy, tag):
         if dets is None:
@@ -195,18 +248,28 @@ class BoostTrack(object):
         scores = dets[:, 4]
 
         # Generate embeddings
+        emb_cost, dets_embs = self.__generate_embeddings(img_numpy, dets, tag)
+        """
         dets_embs = np.ones((dets.shape[0], 1))
         emb_cost = None
         if self.embedder and dets.shape[0] > 0:
             dets_embs = self.embedder.compute_embedding(img_numpy, dets[:, :4], tag)
+
             trk_embs = []
             for t in range(len(self.trackers)):
                 trk_embs.append(self.trackers[t].get_emb())
             trk_embs = np.array(trk_embs)
+
+            print("dets_embs shape", dets_embs.shape)
+            print("trks_embs shape", trk_embs.shape)
+
             if trk_embs.size > 0 and dets.shape[0] > 0:
                 emb_cost = dets_embs.reshape(dets_embs.shape[0], -1) @ trk_embs.reshape((trk_embs.shape[0], -1)).T
-        emb_cost = None if self.embedder is None else emb_cost
 
+        emb_cost = None if self.embedder is None else emb_cost
+        """
+
+        # Association
         matched, unmatched_dets, unmatched_trks, sym_matrix = associate(
             dets,
             trks,
@@ -254,7 +317,7 @@ class BoostTrack(object):
         """
         Params:
           dets - a numpy array of detections in the format [[x1,y1,x2,y2,score],[x1,y1,x2,y2,score],...]
-        Requires: this method must be called once for each frame even with empty detections (use np.empty((0, 5)) for frames without detections). NOTE: img_tensor and img_numpy required ONLY to scale the detections. The `update_no_scale` function, only calls for the raw image in numpy array in order to compute the embeddings.
+        Requirement: this method must be called once for each frame even with empty detections (use np.empty((0, 5)) for frames without detections). NOTE: img_tensor and img_numpy required ONLY to scale the detections. The `update_no_scale` function, only calls for the raw image in numpy array in order to compute the embeddings.
         Returns the a similar array, where the last column is the object ID.
         NOTE: The number of objects returned may differ from the number of detections provided.
         """
