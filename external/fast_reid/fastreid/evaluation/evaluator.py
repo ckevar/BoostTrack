@@ -120,16 +120,17 @@ def inference_on_dataset(model, data_loader, evaluator, flip_test=False):
 
             start_compute_time = time.perf_counter()
             outputs = model(inputs)
-            print("output device", outputs.device)
-            print("output shape", outputs.shape)
 
             # Flip test
             if flip_test:
                 inputs["images"] = inputs["images"].flip(dims=[3])
                 flip_outputs = model(inputs)
                 outputs = (outputs + flip_outputs) / 2
-            if torch.cuda.is_available():
-                torch.cuda.synchronize()
+
+            # New: we don't need cuda to be synchonized
+            #if torch.cuda.is_available():
+            #    torch.cuda.synchronize()
+            #
             total_compute_time += time.perf_counter() - start_compute_time
             evaluator.process(inputs, outputs)
 
