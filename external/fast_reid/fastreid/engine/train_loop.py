@@ -157,7 +157,8 @@ class TrainerBase:
                             print("iter {}".format(self.iter))
                         self.iter += 1
                         
-                        # Debugginh:
+                        # DEBUG:
+                        print("debug", self.after_epoch())
                         self.after_epoch()
                     # Original: self.after_epoch()
             except Exception:
