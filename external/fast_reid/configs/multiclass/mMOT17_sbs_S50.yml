@@ -1,6 +1,7 @@
 _BASE_: ../Base-SBS.yml
 
 MODEL:
+  FREEZE_LAYERS: [ backbone ]
   BACKBONE:
     NAME: build_resnest_backbone
 
@@ -9,19 +10,19 @@ DATASETS:
   TESTS: ("MulticlassMOT17",)
 
 DATALOADER:
-  NUM_INSTANCE: 4
+  NUM_INSTANCE: 26
 
 SOLVER:
   BASE_LR: 0.0001293425
   WARMUP_ITERS: 0
   WARMUP_FACTOR: 1.0
   WARMUP_METHOD: "none"
-  IMS_PER_BATCH: 16
+  IMS_PER_BATCH: 100
   AMP:
     ENABLED: False
 
 TEST:
   EVAL_PERIOD: 1
-  IMS_PER_BATCH: 4
+  IMS_PER_BATCH: 512
 
 OUTPUT_DIR: logs/MulticlassMOT17/sbs_S50
