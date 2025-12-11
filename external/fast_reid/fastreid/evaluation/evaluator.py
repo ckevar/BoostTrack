@@ -126,7 +126,7 @@ def inference_on_dataset(model, data_loader, evaluator, flip_test=False):
                 flip_outputs = model(inputs)
                 outputs = (outputs + flip_outputs) / 2
 
-            # New: we don't need cuda to be synchonized
+            # New: we don't need cuda to be synchonized --> This, GPU being synchronized! no!
             #if torch.cuda.is_available():
             #    torch.cuda.synchronize()
             #
