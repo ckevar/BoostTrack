@@ -115,7 +115,7 @@ def inference_on_dataset(model, data_loader, evaluator, flip_test=False):
     start_time = time.perf_counter()
     total_compute_time = 0
     with inference_context(model), torch.no_grad():
-
+        print("model.device", model.device)
         print("start inferencing with dataloader")
         for idx, inputs in enumerate(data_loader):
             if idx == num_warmup:
@@ -124,8 +124,10 @@ def inference_on_dataset(model, data_loader, evaluator, flip_test=False):
 
             start_compute_time = time.perf_counter()
             print("input size", idx)
-            print(inputs.size)
+            print(inputs.shape)
             outputs = model(inputs)
+            print("output shape", outputs.shape)
+
             # Flip test
             if flip_test:
                 inputs["images"] = inputs["images"].flip(dims=[3])

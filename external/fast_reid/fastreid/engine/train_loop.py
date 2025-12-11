@@ -115,7 +115,6 @@ class TrainerBase:
         self._hooks = []
 
     def register_hooks(self, hooks):
-        print(hooks)
         """
         Register hooks to the trainer. The hooks are executed in the order
         they are registered.
