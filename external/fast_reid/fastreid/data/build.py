@@ -138,7 +138,7 @@ def _test_loader_from_config(cfg, *, dataset_name=None, test_set=None, num_query
 
 
 @configurable(from_config=_test_loader_from_config)
-def build_reid_test_loader(test_set, test_batch_size, num_query, num_workers=4):
+def build_reid_test_loader(test_set, test_batch_size, num_query, num_workers=2):
     """
     Similar to `build_reid_train_loader`. This sampler coordinates all workers to produce
     the exact set of all samples
