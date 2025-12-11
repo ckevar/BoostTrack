@@ -123,10 +123,11 @@ def inference_on_dataset(model, data_loader, evaluator, flip_test=False):
                 total_compute_time = 0
 
             start_compute_time = time.perf_counter()
-            print("input size", idx)
-            print(inputs.shape)
+            print("input device", idx)
+            print(inputs.keys())
+            print(inputs.device)
             outputs = model(inputs)
-            print("output shape", outputs.shape)
+            print("output shape", outputs.devi)
 
             # Flip test
             if flip_test:
