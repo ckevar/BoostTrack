@@ -81,8 +81,8 @@ def load_dataset(cfg):
                                       relabel=False)
     query_dataset.relabel(gallery_dataset.label_map)
 
-    query_loader = DataLoader(query_dataset, batch_size=512)
-    gallery_loader = DataLoader(gallery_dataset, batch_size=512)
+    query_loader = DataLoader(query_dataset, batch_size=cfg.batch_sz)
+    gallery_loader = DataLoader(gallery_dataset, batch_size=cfg.batch_sz)
     
     return query_loader, gallery_loader
 
@@ -226,6 +226,10 @@ def usr_input():
 
     parser.add_argument("--dataset",
                         required=True)
+
+    parser.add_argument("--batch_sz",
+                        type=int,
+                        default=512)
 
     return parser.parse_args()
 
