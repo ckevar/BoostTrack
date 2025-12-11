@@ -166,14 +166,15 @@ class BoostTrack(object):
             import sys
             ext_dir = __file__.split("/")[:-1]
             ext_dir = '/'.join(ext_dir)
-            ext_dir = f"{ext_dir}/../../deep_sort/"
+            ext_dir = f"{ext_dir}/../../deep_sort"
             sys.path.append(ext_dir)
-            ext_dir = f"{ext_dir}/tools/"
+            ext_dir = f"{ext_dir}/tools"
             sys.path.append(ext_dir)
+
             from generate_torch_detections import create_box_encoder
 
             if "mot17" in feature_extractor_path: train_ids = 388
-            elif "kitti" in feature_extractor_path: train_ids = 450
+            elif "kitti" in feature_extractor_path: train_ids = 451
             elif "waymo" in feature_extractor_path: train_ids = 20982 # This might be later modified
             else: raise ValueError(f"Model {feature_extractor_file} not supported, unknow train_ids.\n")
             self.embedder = create_box_encoder(feature_extractor_path, train_ids, batch_size=32)
@@ -194,7 +195,7 @@ class BoostTrack(object):
         if isinstance(self.embedder, EmbeddingComputer): # if FastReID
             dets_embs = self.embedder.compute_embedding(img_numpy, dets[:, :4], tag)
 
-        else:   # if Wide Residual Network
+        else:   # else if Wide Residual Network
             ltwh = dets[:, :4]
             ltwh[:, 2:] = ltwh[:, 2:] - ltwh[:, :2]
             dets_embs = self.embedder(img_numpy, ltwh)
@@ -211,7 +212,7 @@ class BoostTrack(object):
             return None, dets_embs
 
         emb_cost = dets_embs.reshape(dets_embs.shape[0], -1) @ trk_embs.reshape((trk_embs.shape[0], -1)).T
-
+    
         return  emb_cost, dets_embs
 
     def update_no_scale(self, dets, img_numpy, tag):
@@ -249,25 +250,6 @@ class BoostTrack(object):
 
         # Generate embeddings
         emb_cost, dets_embs = self.__generate_embeddings(img_numpy, dets, tag)
-        """
-        dets_embs = np.ones((dets.shape[0], 1))
-        emb_cost = None
-        if self.embedder and dets.shape[0] > 0:
-            dets_embs = self.embedder.compute_embedding(img_numpy, dets[:, :4], tag)
-
-            trk_embs = []
-            for t in range(len(self.trackers)):
-                trk_embs.append(self.trackers[t].get_emb())
-            trk_embs = np.array(trk_embs)
-
-            print("dets_embs shape", dets_embs.shape)
-            print("trks_embs shape", trk_embs.shape)
-
-            if trk_embs.size > 0 and dets.shape[0] > 0:
-                emb_cost = dets_embs.reshape(dets_embs.shape[0], -1) @ trk_embs.reshape((trk_embs.shape[0], -1)).T
-
-        emb_cost = None if self.embedder is None else emb_cost
-        """
 
         # Association
         matched, unmatched_dets, unmatched_trks, sym_matrix = associate(

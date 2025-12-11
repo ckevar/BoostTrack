@@ -21,7 +21,12 @@ def shape_similarity_v1(detects: np.ndarray, tracks: np.ndarray) -> np.ndarray:
     dh = (detects[:, 3] - detects[:, 1]).reshape((-1, 1))
     tw = (tracks[:, 2] - tracks[:, 0]).reshape((1, -1))
     th = (tracks[:, 3] - tracks[:, 1]).reshape((1, -1))
-    return np.exp(-(np.abs(dw - tw)/np.maximum(dw, tw) + np.abs(dh - th)/np.maximum(dw, tw)))
+    np_max = np.maximum(dw, tw)
+
+    if np.any(np_max == 0):
+        np_max = np_max + 1e-6
+
+    return np.exp(-(np.abs(dw - tw)/np_max + np.abs(dh - th)/np_max))
 
 
 def shape_similarity_v2(detects: np.ndarray, tracks: np.ndarray) -> np.ndarray:
