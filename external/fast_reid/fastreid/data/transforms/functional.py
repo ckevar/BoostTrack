@@ -45,7 +45,7 @@ def to_tensor(pic):
     else:
         # Legacy: img = torch.ByteTensor(torch.ByteStorage.from_buffer(pic.tobytes()))
         # New
-        img = torch.frombuffer(pic.tobytes(), dtype=torch.uint8)
+        img = torch.from_numpy(np.frombuffer(pic.tobytes(), dtype=np.uint8))
     # PIL image mode: L, LA, P, I, F, RGB, YCbCr, RGBA, CMYK
     if pic.mode == 'YCbCr':
         nchannel = 3
