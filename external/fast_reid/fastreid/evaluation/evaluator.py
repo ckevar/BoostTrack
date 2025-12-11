@@ -124,7 +124,7 @@ def inference_on_dataset(model, data_loader, evaluator, flip_test=False):
 
             start_compute_time = time.perf_counter()
             print("input device", idx)
-            print(inputs.keys())
+            print(type(inputs['images']))
             print(inputs.device)
             outputs = model(inputs)
             print("output shape", outputs.devi)
