@@ -101,23 +101,30 @@ def inference_on_dataset(model, data_loader, evaluator, flip_test=False):
     Returns:
         The return value of `evaluator.evaluate()`
     """
+    print("getting world size")
     num_devices = comm.get_world_size()
     logger = logging.getLogger(__name__)
     logger.info("Start inference on {} images".format(len(data_loader.dataset)))
 
+    print("dataloader length")
     total = len(data_loader)  # inference data loader must have a fixed length
     evaluator.reset()
 
+    print("warming up")
     num_warmup = min(5, total - 1)
     start_time = time.perf_counter()
     total_compute_time = 0
     with inference_context(model), torch.no_grad():
+
+        print("start inferencing with dataloader")
         for idx, inputs in enumerate(data_loader):
             if idx == num_warmup:
                 start_time = time.perf_counter()
                 total_compute_time = 0
 
             start_compute_time = time.perf_counter()
+            print("input size", idx)
+            print(inputs.size)
             outputs = model(inputs)
             # Flip test
             if flip_test:
