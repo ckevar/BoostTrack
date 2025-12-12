@@ -244,7 +244,7 @@ def extract_save_features(cfg):
     G_feats = G_feats.numpy()
     G_ids = G_ids.numpy()
 
-    np.savez_compressed(f"{cfg.name}-features.npz",
+    np.savez_compressed(f"{cfg.out_dir}/{cfg.name}-features.npz",
         q_feats = Q_feats,
         q_ids = Q_ids,
         g_feats = G_feats,
