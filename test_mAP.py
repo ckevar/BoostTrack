@@ -113,26 +113,32 @@ def extract_features(model, loader, feat_dim):
             feats[ptr:ptr+b] = batch_feats
             labels[ptr:ptr+b] = lbls
 
-            # -- Debugging Only -- #
-            #print("min", batch_feats.min())
-            #print("max", batch_feats.max())
-            #if ptr > 512:
-            #    exit(1)
-            # -- -- #
             ptr += b
 
     return feats, labels, camids
+
+def __cosine_batches():
+    pass
 
 def __compute_cmc_map_in_gpu(query_feats,
                            query_ids,
                            gallery_feats,
                            gallery_ids,
-                           batch_size=32092):
+                           batch_size=0):
+
+    len_gallery_feats = len(gallery_feats)
+    len_query_feats   = len(query_feats)
+    step_print = len_query_feats // 100
+
     query_feats = query_feats.to("cuda")
     query_ids   = query_ids.to("cuda")
     gallery_ids = gallery_ids.to("cuda")
 
-    len_gallery_feats = len(gallery_feats)
+    gallery_in_cpu = 1
+    if batch_size == 0:
+        gallery_feats = gallery_feats.to("cuda")
+        batch_size = len_gallery_feats
+        gallery_in_cpu = 1
 
     # Preallocation
     dist       = torch.empty(len_gallery_feats, device="cuda", dtype=gallery_feats.dtype)
@@ -145,10 +151,15 @@ def __compute_cmc_map_in_gpu(query_feats,
     for i in range(len(query_feats)):
         queryf = query_feats[i:i+1]
 
+        if i % step_print == 0:
+            print(f"{i}/{len_query_feats}")
 
         # Cos distance
         for j in range(0, len_gallery_feats, batch_size):
-            galleryf = gallery_feats[j:j+batch_size].to("cuda")
+            #galleryf = gallery_feats[j:j+batch_size].to("cuda")
+            galleryf = gallery_feats[j:j+batch_size]
+            if gallery_in_cpu: 
+                galleryf = galleryf.to("cuda")
             num_moved = galleryf.shape[0]
             sim = queryf @ galleryf.T
             dist[j:j+num_moved] = (1 - sim).squeeze(0)
@@ -294,7 +305,7 @@ def get_config():
 
     parser.add_argument("--batch_sz_mAP",
                         type=int,
-                        default=512000)
+                        default=0)
 
     cfg = parser.parse_args()
 
@@ -357,5 +368,5 @@ if "__main__" == __name__:
         case _:
             raise Exception("Unknown task {cfg.task}")
     
-    print(f"mAP: {mAP}, Rank-1: {cmc[0]}, Rank-5:{cmc[4]}, Rank-9:{cmc[9]}")
+    print(f"\nmAP: {mAP}, Rank-1: {cmc[0]}, Rank-5:{cmc[4]}, Rank-9:{cmc[9]}")
 
