@@ -216,25 +216,51 @@ def full_computation(cfg):
             batch_size=cfg.batch_sz_mAP)
 
 def __load_features(cfg):
-    pass
+    Q_feats = np.load(f"{cfg.query_feats}-feats.npy")
+    Q_ids = np.load(f"{cfg.query_feats}-ids.npy")
 
-def compute_mAP(cfg):
-    Q_feats, Q_ids, G_feats, G_ids = __load_features(cfg)
+    G_feats = np.load(f"{cfg.gallery_feats}-feats.npy")
+    G_ids = np.load(f"{cfg.gallery_feats}-ids.npy")
+
+    return Q_feats, Q_ids, G_feats, Q_ids
+
+
+def mAP_from_feats(cfg):
+
+    Q_feats, Q_ids, G_feats, Q_ids = __load_features(cfg)
+
+    Q_feats = Q_feats.from_numpy()
+    G_feats = G_feats.from_numpy()
+
+    Q_ids = Q_ids.from_numpy()
+    G_ids = G_ids.from_numpy()
+
     return __compute_cmc_map_in_gpu(
             Q_feats, Q_ids,
             G_feats, G_ids,
             batch_size=cfg.batch_sz_mAP)
 
-def extract_features_and_store(cfg):
+def extract_save_features(cfg):
 
     Q_feats, Q_ids, G_feats, G_ids = __extract_features(cfg)
+
+    Q_feats = Q_feats.numpy()
+    Q_ids = Q_ids.numpy()
+    G_feats = G_feats.numpy()
+    G_ids = G_ids.numpy()
+
+    np.save(f"{cfg.name}-query-feats.npy", Q_feats)
+    np.save(f"{cfg.name}-query-ids.npy", Q_ids)
+
+    np.save(f"{cfg.name}-gallery-feats.npy", G_feats)
+    np.save(f"{cfg.name}-gallery-ids.npy", G_ids)
 
 def get_config():
     parser = argparse.ArgumentParser("Test mAP")
 
     parser.add_argument("--task",
                         type=str,
-                        default="full_compute")
+                        default="full")
 
     parser.add_argument("--out_dir",
                         type=str,
@@ -278,7 +304,7 @@ def get_config():
         if cfg.name is None:
             raise Exception("An Output directory is required, i.e. --name <experiment name>")
 
-    if "compute_mAP" == cfg.task:
+    if "mAP_from_feats" == cfg.task:
         if cfg.query_feats is None:
             raise Exception("Query Features numpy file is required, i.e. --query_feats <path/to/QUERY/features>")
 
@@ -291,15 +317,15 @@ if "__main__" == __name__:
     cfg = get_config()
 
     match cfg.task:
-        case "full_compute":
+        case "full":
             cmc, mAP = full_computation(cfg)
 
         case "features_only":
-            extract_features_and_store(cfg)
+            extract_save_features(cfg)
             exit(0)
 
-        case "compute_mAP":
-            cmc, mAP = compute_mAP(cfg)
+        case "mAP_from_feats":
+            cmc, mAP = mAP_from_feats(cfg)
         
         case _:
             raise Exception("Unknown task {cfg.task}")
