@@ -4,6 +4,7 @@ import torch
 from torchvision import transforms
 import os
 from PIL import Image
+import numpy as np
 
 from external.adaptors.fastreid_adaptor import FastReID
 
@@ -216,24 +217,18 @@ def full_computation(cfg):
             batch_size=cfg.batch_sz_mAP)
 
 def __load_features(cfg):
-    Q_feats = np.load(f"{cfg.query_feats}-feats.npy")
-    Q_ids = np.load(f"{cfg.query_feats}-ids.npy")
-
-    G_feats = np.load(f"{cfg.gallery_feats}-feats.npy")
-    G_ids = np.load(f"{cfg.gallery_feats}-ids.npy")
-
-    return Q_feats, Q_ids, G_feats, Q_ids
-
+    data = np.load(cfg.features)
+    return data['q_feats'], data['q_ids'], data['g_feats'], data['g_ids']
 
 def mAP_from_feats(cfg):
 
-    Q_feats, Q_ids, G_feats, Q_ids = __load_features(cfg)
+    Q_feats, Q_ids, G_feats, G_ids = __load_features(cfg)
 
-    Q_feats = Q_feats.from_numpy()
-    G_feats = G_feats.from_numpy()
+    Q_feats = torch.from_numpy(Q_feats)
+    G_feats = torch.from_numpy(G_feats)
 
-    Q_ids = Q_ids.from_numpy()
-    G_ids = G_ids.from_numpy()
+    Q_ids = torch.from_numpy(Q_ids)
+    G_ids = torch.from_numpy(G_ids)
 
     return __compute_cmc_map_in_gpu(
             Q_feats, Q_ids,
@@ -249,18 +244,25 @@ def extract_save_features(cfg):
     G_feats = G_feats.numpy()
     G_ids = G_ids.numpy()
 
-    np.save(f"{cfg.name}-query-feats.npy", Q_feats)
-    np.save(f"{cfg.name}-query-ids.npy", Q_ids)
+    np.savez_compressed(f"{cfg.name}-features.npz",
+        q_feats = Q_feats,
+        q_ids = Q_ids,
+        g_feats = G_feats,
+        g_ids = G_ids
+    )
 
-    np.save(f"{cfg.name}-gallery-feats.npy", G_feats)
-    np.save(f"{cfg.name}-gallery-ids.npy", G_ids)
+    print("Q_feats size", Q_feats.shape)
+    print("G_feats size", G_feats.shape)
+    print("Q_ids size", Q_ids.shape)
+    print("G_ids size", G_ids.shape)
+
 
 def get_config():
     parser = argparse.ArgumentParser("Test mAP")
 
     parser.add_argument("--task",
                         type=str,
-                        default="full")
+                        default="mAP-from-dataset")
 
     parser.add_argument("--out_dir",
                         type=str,
@@ -270,22 +272,21 @@ def get_config():
                         type=str,
                         default=None)
 
-    parser.add_argument("--query_feats",
-                        type=str,
-                        default=None)
-
-    parser.add_argument("--gallery_feats",
+    parser.add_argument("--features",
                         type=str,
                         default=None)
 
     parser.add_argument("--model",
-                        required=True)
+                        type=str,
+                        default=None)
 
     parser.add_argument("--model_cfg",
-                        required=True)
+                        type=str,
+                        default=None)
 
     parser.add_argument("--dataset",
-                        required=True)
+                        type=str,
+                        default=None)
 
     parser.add_argument("--batch_sz",
                         type=int,
@@ -297,19 +298,45 @@ def get_config():
 
     cfg = parser.parse_args()
 
-    if "features_only" == cfg.task:
-        if cfg.out_dir is None:
-            raise Exception("An Output directory is required, i.e. --out_dir <output/dir>")
+    match cfg.task:
 
-        if cfg.name is None:
-            raise Exception("An Output directory is required, i.e. --name <experiment name>")
+        case "mAP-from-dataset":
+            if cfg.model is None:
+                raise Exception("A model is required, i.e. --model <path/to/model.pth>")
 
-    if "mAP_from_feats" == cfg.task:
-        if cfg.query_feats is None:
-            raise Exception("Query Features numpy file is required, i.e. --query_feats <path/to/QUERY/features>")
+            if cfg.model_cfg is None:
+                raise Exception("A model config file is required, i.e. --model_cfg <path/to/config.yaml>")
 
-        if cfg.gallery_feats is None:
-            raise Exception("Query Features numpy file is required, i.e. --gallery_feats <path/to/GALLERY/features>")
+            if cfg.dataset is None:
+                raise Exception("A dataset path is required, i.e. --dataset <path/to/dataset/dir>")
+
+        case "features-only":
+            if cfg.model is None:
+                raise Exception("A model is required, i.e. --model <path/to/model.pth>")
+
+            if cfg.model_cfg is None:
+                raise Exception("A model config file is required, i.e. --model_cfg <path/to/config.yaml>")
+
+            if cfg.dataset is None:
+                raise Exception("A dataset path is required, i.e. --dataset <path/to/dataset/dir>")
+
+            if cfg.out_dir is None:
+                raise Exception("An Output directory is required, i.e. --out_dir <output/dir>")
+
+            if cfg.name is None:
+                raise Exception("An Output directory is required, i.e. --name <experiment name>")
+
+        case "mAP-from-features":
+            if cfg.features is None:
+                raise Exception("Query Features numpy file is required, i.e. --features <path/to/features.npz>")
+
+        case "mAP":
+            if cfg.features is None:
+                print("Features is not provided, attempting to do full computation: feature extraction + mAP computation.")
+
+
+        case _:
+            raise Exception("Uknown task {cfg.task}")
 
     return cfg
 
@@ -317,14 +344,14 @@ if "__main__" == __name__:
     cfg = get_config()
 
     match cfg.task:
-        case "full":
+        case "mAP-from-dataset":
             cmc, mAP = full_computation(cfg)
 
-        case "features_only":
+        case "features-only":
             extract_save_features(cfg)
             exit(0)
 
-        case "mAP_from_feats":
+        case "mAP-from-features":
             cmc, mAP = mAP_from_feats(cfg)
         
         case _:
