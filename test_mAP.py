@@ -122,7 +122,7 @@ def extract_features(model, loader, feat_dim):
 
     return feats, labels, camids
 
-def compute_cmc_map_in_gpu(query_feats,
+def __compute_cmc_map_in_gpu(query_feats,
                            query_ids,
                            gallery_feats,
                            gallery_ids,
@@ -193,30 +193,64 @@ def compute_cmc_map_in_gpu(query_feats,
 #   pip install git+https://github.com/KaiyangZhou/deep-person-reid.git
 # from torchreid.metrics.rank import evaluate_rank
 """
-def compute_metrics(cfg):
-    
+
+def __extract_features(cfg):
     model = load_model(cfg.model, cfg.model_cfg)
     query, gallery = load_dataset(cfg)
 
     feats_dim = 2048 # This is by design
 
-    Q_feats, Q_ids, Q_cams = extract_features(model, query, feats_dim)
-    G_feats, G_ids, G_cams = extract_features(model, gallery, feats_dim)
+    Q_feats, Q_ids, _ = extract_features(model, query, feats_dim)
+    G_feats, G_ids, _ = extract_features(model, gallery, feats_dim)
 
-    """ Debug only
-    G_cams = G_cams + 1
-    distmat = 1 - torch.mm(Q_feats, G_feats.T).cpu().numpy()
-    cmc_ref, map_ref = evaluate_rank(distmat, Q_ids, G_ids, Q_cams, G_cams, max_rank=50)
-    print(f"ref mAP:{map_ref}, ref Rank: {cmc_ref[0]}")
-    """
+    return Q_feats, Q_ids, G_feats, G_ids
 
-    return compute_cmc_map_in_gpu(
+
+def full_computation(cfg):
+
+    Q_feats, Q_ids, G_feats, G_ids = __extract_features(cfg)
+    
+    return __compute_cmc_map_in_gpu(
             Q_feats, Q_ids,
             G_feats, G_ids,
-            batch_size=512000)
+            batch_size=cfg.batch_sz_mAP)
 
-def usr_input():
+def __load_features(cfg):
+    pass
+
+def compute_mAP(cfg):
+    Q_feats, Q_ids, G_feats, G_ids = __load_features(cfg)
+    return __compute_cmc_map_in_gpu(
+            Q_feats, Q_ids,
+            G_feats, G_ids,
+            batch_size=cfg.batch_sz_mAP)
+
+def extract_features_and_store(cfg):
+
+    Q_feats, Q_ids, G_feats, G_ids = __extract_features(cfg)
+
+def get_config():
     parser = argparse.ArgumentParser("Test mAP")
+
+    parser.add_argument("--task",
+                        type=str,
+                        default="full_compute")
+
+    parser.add_argument("--out_dir",
+                        type=str,
+                        default=None)
+
+    parser.add_argument("--name",
+                        type=str,
+                        default=None)
+
+    parser.add_argument("--query_feats",
+                        type=str,
+                        default=None)
+
+    parser.add_argument("--gallery_feats",
+                        type=str,
+                        default=None)
 
     parser.add_argument("--model",
                         required=True)
@@ -231,11 +265,44 @@ def usr_input():
                         type=int,
                         default=512)
 
-    return parser.parse_args()
+    parser.add_argument("--batch_sz_mAP",
+                        type=int,
+                        default=512000)
+
+    cfg = parser.parse_args()
+
+    if "features_only" == cfg.task:
+        if cfg.out_dir is None:
+            raise Exception("An Output directory is required, i.e. --out_dir <output/dir>")
+
+        if cfg.name is None:
+            raise Exception("An Output directory is required, i.e. --name <experiment name>")
+
+    if "compute_mAP" == cfg.task:
+        if cfg.query_feats is None:
+            raise Exception("Query Features numpy file is required, i.e. --query_feats <path/to/QUERY/features>")
+
+        if cfg.gallery_feats is None:
+            raise Exception("Query Features numpy file is required, i.e. --gallery_feats <path/to/GALLERY/features>")
+
+    return cfg
 
 if "__main__" == __name__:
-    cfg = usr_input()
-    cmc, mAP = compute_metrics(cfg)
+    cfg = get_config()
+
+    match cfg.task:
+        case "full_compute":
+            cmc, mAP = full_computation(cfg)
+
+        case "features_only":
+            extract_features_and_store(cfg)
+            exit(0)
+
+        case "compute_mAP":
+            cmc, mAP = compute_mAP(cfg)
+        
+        case _:
+            raise Exception("Unknown task {cfg.task}")
     
     print(f"mAP: {mAP}, Rank-1: {cmc[0]}, Rank-5:{cmc[4]}, Rank-9:{cmc[9]}")
 

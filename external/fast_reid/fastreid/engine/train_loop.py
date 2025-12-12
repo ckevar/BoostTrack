@@ -261,7 +261,7 @@ class SimpleTrainer(TrainerBase):
 
         losses.backward()
 
-        self._write_metrics(loss_dict, data_time)
+        #self._write_metrics(loss_dict, data_time)
 
         """
         If you need gradient clipping/scaling or other processing, you can
