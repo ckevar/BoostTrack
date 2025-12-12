@@ -2,7 +2,7 @@ _BASE_: ../Base-SBS.yml
 
 MODEL:
   FREEZE_LAYERS: [ backbone ]
-  HEAD: 
+  HEADS: 
     NUM_CLASSES: 388 
   BACKBONE:
     NAME: build_resnest_backbone
