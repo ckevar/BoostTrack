@@ -153,7 +153,7 @@ class TrainerBase:
                         self.before_step()
                         self.run_step()
                         self.after_step()
-                        if self.iter % 20 == 0:
+                        if self.iter % 60 == 0:
                             print("iter {}".format(self.iter))
                         self.iter += 1
                     self.after_epoch()
