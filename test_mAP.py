@@ -341,11 +341,6 @@ def get_config():
             if cfg.features is None:
                 raise Exception("Query Features numpy file is required, i.e. --features <path/to/features.npz>")
 
-        case "mAP":
-            if cfg.features is None:
-                print("Features is not provided, attempting to do full computation: feature extraction + mAP computation.")
-
-
         case _:
             raise Exception("Uknown task {cfg.task}")
 
@@ -364,7 +359,7 @@ if "__main__" == __name__:
 
         case "mAP-from-features":
             cmc, mAP = mAP_from_feats(cfg)
-        
+
         case _:
             raise Exception("Unknown task {cfg.task}")
     
