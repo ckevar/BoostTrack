@@ -8,6 +8,8 @@ import numpy as np
 
 from external.adaptors.fastreid_adaptor import FastReID
 
+# -- General Utils -- #
+
 class ReIDListDataset(Dataset):
     def __init__(self, root_dir, list_path, transform=None, relabel=True):
         self.root_dir = root_dir
@@ -63,36 +65,12 @@ def load_model(path, cfg_file):
     model.cuda()
     return model.half().to("cuda")
 
-def load_dataset(cfg):
-
-    path = cfg.dataset
-    transform_qg = transforms.Compose([
-        transforms.Resize((128, 256)),
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-        ])
-    
-
-    gallery_dataset = ReIDListDataset(path,
-                                      f"{path}/gallery.txt",
-                                      transform=transform_qg)
-    query_dataset   = ReIDListDataset(path,
-                                      f"{path}/query.txt",
-                                      transform=transform_qg,
-                                      relabel=False)
-    query_dataset.relabel(gallery_dataset.label_map)
-
-    query_loader = DataLoader(query_dataset, batch_size=cfg.batch_sz)
-    gallery_loader = DataLoader(gallery_dataset, batch_size=cfg.batch_sz)
-    
-    return query_loader, gallery_loader
-
-def extract_features(model, loader, feat_dim):
+def extract_features(model, loader, feats_dim):
     model.eval()
     n_samples = len(loader.dataset)
 
     # Preallocate
-    feats = torch.zeros((n_samples, feat_dim))
+    feats = torch.zeros((n_samples, feats_dim))
     labels = torch.zeros(n_samples, dtype=torch.long)
     
     camids = None
@@ -117,14 +95,175 @@ def extract_features(model, loader, feat_dim):
 
     return feats, labels, camids
 
-def __cosine_batches():
-    pass
+def __gen_transforms():
+    return transforms.Compose([
+        transforms.Resize((128, 256)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+        ])
 
-def __compute_cmc_map_in_gpu(query_feats,
-                           query_ids,
-                           gallery_feats,
-                           gallery_ids,
-                           batch_size=0):
+
+# -- Utils for Distances -- #
+
+def __get_basename(filename_plus_extension):
+    fe = filename_plus_extension.split(".")
+    ext = fe[1]
+    basename = fe[0]
+    if basename is None:
+        print(f"Filename {basename} seems off. Saving with temporary name 'tmp'")
+        basename = "tmp"
+
+    return basename
+
+def __load_dataset_for_dists(cfg):
+    path = cfg.dataset
+    map_file = cfg.map
+    
+    trans = __gen_transforms()
+    
+    dataset = ReIDListDataset(path,
+                              f"{path}/{map_file}",
+                              transform=trans,
+                              relabel=False)
+
+    loader = DataLoader(dataset, batch_size=cfg.batch_sz)
+
+    return loader
+
+def __extract_features_for_dists(cfg):
+    model = load_model(cfg.model, cfg.model_cfg)
+    dataset = __load_dataset_for_dists(cfg)
+
+    feats, ids, _ = extract_features(model, dataset, cfg.feats_dim)
+
+    return feats, ids
+
+## -- Utils for __compute_distances  -- ##
+
+def __mean_feats_vectorized(feats, ids):
+    uniq_ids, inverse_indices = torch.unique(ids, return_inverse=True)
+    num_groups = uniq_ids.size(0)
+
+    # -- Centered Features -- #
+    sum_feats = torch.zeros(num_groups, feats.size(1), device=feats.device, dtype=feats.dtype)
+    sum_feats.index_add_(0, inverse_indices, feats)
+
+    counts = torch.bincount(inverse_indices).float().unsqueeze(1)
+
+    feats_mean = sum_feats / counts
+
+    # -- Compute Distances -- #
+    expanded_means = feats_mean[inverse_indices]
+    dot_product = (feats * expanded_means).sum(1)
+    row_distances = 1 - dot_product
+
+    # -- Average, min, max distances -- #
+    sum_dist = torch.zeros(num_groups, device=feats.device, dtype=feats_mean.dtype)
+    max_dist = torch.empty(num_groups, device=feats.device, dtype=feats_mean.dtype)
+    min_dist = torch.empty(num_groups, device=feats.device, dtype=feats_mean.dtype)
+
+    max_dist.fill_(float('-inf'))
+    min_dist.fill_(float('inf'))
+
+    sum_dist.index_add_(0, inverse_indices, row_distances)
+    max_dist.scatter_reduce_(0, inverse_indices, row_distances, reduce='amax', include_self=False)
+    min_dist.scatter_reduce_(0, inverse_indices, row_distances, reduce='amin', include_self=False)
+
+    dist = sum_dist / counts.squeeze()
+
+    # -- Sort IDs by average distances -- #
+    sorted_idx = torch.argsort(dist, descending=True)
+    uniq_ids = uniq_ids[sorted_idx]
+    feats_mean = feats_mean[sorted_idx]
+    dist = dist[sorted_idx]
+    min_dist = min_dist[sorted_idx]
+    max_dist = max_dist[sorted_idx]
+
+    return uniq_ids, feats_mean, dist, min_dist, max_dist
+
+
+def __inter_id_dists_vectorized(anchor_feats, anchor_ids):
+    dist = 1 - anchor_feats @ anchor_feats.T # Tensor size patches x ids
+    min_dist, min_indices = torch.min(dist, dim=1)
+
+    row_indices = torch.arange(dist.size(0), device=dist.device)
+    mask = min_indices != row_indices 
+
+    confused_ids = anchor_ids[mask]
+    distractor_ids = anchor_ids[min_indices][mask]
+
+    confusing_dist = min_dist[mask]
+
+    return confused_ids, distractor_ids, confusing_dist
+
+def __save_intra(file, ids, dists, min_d, max_d):
+    filename = f"{file}-intra-dist.txt"
+    with open(filename, 'w') as fd:
+        fd.write("# id mean_dist min_dist max_dist\n")
+        for i, d, md, MD in zip(ids, dists, min_d, max_d):
+            fd.write(f"{i} {d:.6f} {md:.6f} {MD:.6f}\n")
+
+def __save_inter(file, c_ids, d_ids, dists):
+    filename = f"{file}-inter-dist.txt"
+    with open(filename, 'w') as fd:
+        fd.write("# confused_id distractor_id confusing_dist\n")
+        for ci, di, dd in zip(c_ids, d_ids, dists):
+            fd.write(f"{ci} {di} {dd:.6f}\n")
+
+def __compute_distances(cfg, feats, ids):
+    
+    # IMPORTANT! to do it in cuda, otherwise, it takes an eternity all these computations.
+    feats = feats.to("cuda")
+    ids = ids.to("cuda")
+
+    print("Computing intra ID distances...")
+    u_ids, feats_mean, dists, min_d, max_d = __mean_feats_vectorized(feats, ids)
+
+    print("Computing inter ID distances...")
+    confused_ids, distractor_ids, confusing_d = __inter_id_dists_vectorized(feats_mean, u_ids)
+
+    print(f"Saving in {cfg.out_file}")
+    u_ids = u_ids.to("cpu").numpy()
+    dists = dists.to("cpu").numpy()
+    min_d = min_d.to("cpu").numpy()
+    max_d = max_d.to("cpu").numpy()
+    confused_ids = confused_ids.to("cpu").numpy()
+    distractor_ids = distractor_ids.to("cpu").numpy()
+    confusing_d = confusing_d.to("cpu").numpy()
+
+    __save_intra(cfg.out_file, u_ids, dists, min_d, max_d)
+    __save_inter(cfg.out_file, confused_ids, distractor_ids, confusing_d)
+
+
+# -- Utils for mAP -- #
+def __load_dataset_for_mAP(cfg):
+
+    path = cfg.dataset
+    trans_qg = __gen_transforms()
+
+    gallery_dataset = ReIDListDataset(path,
+                                      f"{path}/gallery.txt",
+                                      transform=trans_qg)
+    query_dataset   = ReIDListDataset(path,
+                                      f"{path}/query.txt",
+                                      transform=trans_qg,
+                                      relabel=False)
+    query_dataset.relabel(gallery_dataset.label_map)
+
+    query_loader = DataLoader(query_dataset, batch_size=cfg.batch_sz)
+    gallery_loader = DataLoader(gallery_dataset, batch_size=cfg.batch_sz)
+    
+    return query_loader, gallery_loader
+
+
+def __compute_cmc_map_in_gpu(query_feats, query_ids,
+                             gallery_feats, gallery_ids,
+                             batch_size=0):
+    """
+    # Debugger: Install this to check if my implementation is correct:
+    #   pip install git+https://github.com/KaiyangZhou/deep-person-reid.git
+    # from torchreid.metrics.rank import evaluate_rank
+    """
 
     len_gallery_feats = len(gallery_feats)
     len_query_feats   = len(query_feats)
@@ -200,40 +339,61 @@ def __compute_cmc_map_in_gpu(query_feats,
 
     return cmc, mAP
 
-"""
-# Debugger: Install this to check if my implementation is correct:
-#   pip install git+https://github.com/KaiyangZhou/deep-person-reid.git
-# from torchreid.metrics.rank import evaluate_rank
-"""
-
-def __extract_features(cfg):
+def __extract_features_for_mAP(cfg):
     model = load_model(cfg.model, cfg.model_cfg)
-    query, gallery = load_dataset(cfg)
+    query, gallery = __load_dataset_for_mAP(cfg)
 
-    feats_dim = 2048 # This is by design
-
-    Q_feats, Q_ids, _ = extract_features(model, query, feats_dim)
-    G_feats, G_ids, _ = extract_features(model, gallery, feats_dim)
+    Q_feats, Q_ids, _ = extract_features(model, query, cfg.feats_dim)
+    G_feats, G_ids, _ = extract_features(model, gallery, cfg.feats_dim)
 
     return Q_feats, Q_ids, G_feats, G_ids
 
+# -- Utils for mAP_from_feats -- #
+def __load_features_for_mAP(cfg):
+    data = np.load(cfg.features)
+    return data['q_feats'], data['q_ids'], data['g_feats'], data['g_ids']
 
-def full_computation(cfg):
 
-    Q_feats, Q_ids, G_feats, G_ids = __extract_features(cfg)
+# -- Interfaces -- #
+
+def distances_from_dataset(cfg):
+    print("\nExtracting features...")
+    feats, ids = __extract_features_for_dists(cfg)
+    __compute_distances(cfg, feats, ids)
+
+def distances_from_features(cfg):
+    data = np.load(cfg.features)
+
+    feats = torch.from_numpy(data['feats']).to("cuda")
+    ids = torch.from_numpy(data['ids']).to("cuda")
+
+    __compute_distances(cfg, feats, ids)
     
-    return __compute_cmc_map_in_gpu(
+def extract_save_features_for_dists(cfg):
+    feats, ids = __extract_features_for_dists(cfg)
+    feats = feats.numpy()
+    ids = ids.numpy()
+    np.savez_compressed(f"{cfg.out_dir}/{cfg.out_file}-features.npz",
+                        feats = feats,
+                        ids = ids
+    )
+
+
+
+def mAP_from_dataset(cfg):
+
+    Q_feats, Q_ids, G_feats, G_ids = __extract_features_for_mAP(cfg)
+    
+    cmc, mAP = __compute_cmc_map_in_gpu(
             Q_feats, Q_ids,
             G_feats, G_ids,
             batch_size=cfg.batch_sz_mAP)
 
-def __load_features(cfg):
-    data = np.load(cfg.features)
-    return data['q_feats'], data['q_ids'], data['g_feats'], data['g_ids']
+    print(f"\nmAP: {mAP}, Rank-1: {cmc[0]}, Rank-5:{cmc[4]}, Rank-9:{cmc[9]}")
 
 def mAP_from_feats(cfg):
 
-    Q_feats, Q_ids, G_feats, G_ids = __load_features(cfg)
+    Q_feats, Q_ids, G_feats, G_ids = __load_features_for_mAP(cfg)
 
     Q_feats = torch.from_numpy(Q_feats)
     G_feats = torch.from_numpy(G_feats)
@@ -241,14 +401,16 @@ def mAP_from_feats(cfg):
     Q_ids = torch.from_numpy(Q_ids)
     G_ids = torch.from_numpy(G_ids)
 
-    return __compute_cmc_map_in_gpu(
+    cmc, mAP =__compute_cmc_map_in_gpu(
             Q_feats, Q_ids,
             G_feats, G_ids,
             batch_size=cfg.batch_sz_mAP)
 
-def extract_save_features(cfg):
+    print(f"\nmAP: {mAP}, Rank-1: {cmc[0]}, Rank-5:{cmc[4]}, Rank-9:{cmc[9]}")
 
-    Q_feats, Q_ids, G_feats, G_ids = __extract_features(cfg)
+def extract_save_features_for_mAP(cfg):
+
+    Q_feats, Q_ids, G_feats, G_ids = __extract_features_for_mAP(cfg)
 
     Q_feats = Q_feats.numpy()
     Q_ids = Q_ids.numpy()
@@ -262,6 +424,7 @@ def extract_save_features(cfg):
         g_ids = G_ids
     )
 
+    print("Fallowing Information is important to determine GPU batch upon calculating mAP in batches if needed.")
     print("Q_feats size", Q_feats.shape)
     print("G_feats size", G_feats.shape)
     print("Q_ids size", Q_ids.shape)
@@ -306,6 +469,15 @@ def get_config():
     parser.add_argument("--batch_sz_mAP",
                         type=int,
                         default=0)
+    parser.add_argument("--map",
+                        type=str,
+                        default="train.txt")
+    
+    parser.add_argument("--feats_dim",
+                        type=int,
+                        default=2048, # This is usually the case.
+                        help="2048 is usually the case in fastreid models. But it might vary."
+                        )
 
     cfg = parser.parse_args()
 
@@ -341,9 +513,59 @@ def get_config():
             if cfg.features is None:
                 raise Exception("Query Features numpy file is required, i.e. --features <path/to/features.npz>")
 
+        # -- DISTANCES, useful to mine hard IDs -- #
+        case "distances-features-only":
+            if cfg.model is None:
+                raise Exception("A model is required, i.e. --model <path/to/model.pth>")
+
+            if cfg.model_cfg is None:
+                raise Exception("A model config file is required, i.e. --model_cfg <path/to/config.yaml>")
+
+            if cfg.dataset is None:
+                raise Exception("A dataset path is required, i.e. --dataset <path/to/dataset/dir>")
+
+            if cfg.out_dir is None:
+                raise Exception("An Output directory is required, i.e. --out_dir <output/dir>")
+
+            if cfg.name is None:
+                raise Exception("An Output directory is required, i.e. --name <experiment name>")
+
+            print(f"\nWARNING: Computing distances on map file {cfg.map}, you can set upload different map. --map train.txt|gallery.txt|query.txt. Keep in mind that query set contains only one image per ID\n")
+
+        case "distances-from-dataset":
+
+            if cfg.model is None:
+                raise Exception("A model is required, i.e. --model <path/to/model.pth>")
+
+            if cfg.model_cfg is None:
+                raise Exception("A model config file is required, i.e. --model_cfg <path/to/config.yaml>")
+
+            if cfg.dataset is None:
+                raise Exception("A dataset path is required, i.e. --dataset <path/to/dataset/dir>")
+
+            if cfg.name is None:
+                raise Exception("An Output directory is required, i.e. --name <experiment name>")
+
+            print(f"\nWARNING: Computing distances on map file {cfg.map}, you can set upload different map. --map train.txt|gallery.txt|query.txt\n")
+
+            if cfg.out_dir is None:
+                raise Exception("An Output directory is required, i.e. --out_dir <output/dir>")
+
+        case "distances-from-features":
+            if cfg.features is None:
+                raise Exception("Query Features numpy file is required, i.e. --features <path/to/features.npz>")
+            if cfg.out_dir is None:
+                raise Exception("An Output directory is required, i.e. --out_dir <output/dir>")
+
         case _:
             raise Exception("Uknown task {cfg.task}")
 
+    
+    # -- Distance Files -- #
+    if "distances" in cfg.task:
+        map_file = __get_basename(cfg.map)
+        cfg.out_file = f"{cfg.out_dir}/{map_file}-{cfg.name}"
+        
     return cfg
 
 if "__main__" == __name__:
@@ -351,17 +573,23 @@ if "__main__" == __name__:
 
     match cfg.task:
         case "mAP-from-dataset":
-            cmc, mAP = full_computation(cfg)
+            mAP_from_dataset(cfg)
 
         case "features-only":
-            extract_save_features(cfg)
-            exit(0)
+            extract_save_features_for_mAP(cfg)
 
         case "mAP-from-features":
-            cmc, mAP = mAP_from_feats(cfg)
+            mAP_from_feats(cfg)
 
+        case "distances-from-dataset":
+            distances_from_dataset(cfg)
+
+        case "distances-features-only":
+            extract_save_features_for_dists(cfg)
+
+        case "distances-from-features":
+            distances_from_features(cfg)
+            
         case _:
-            raise Exception("Unknown task {cfg.task}")
-    
-    print(f"\nmAP: {mAP}, Rank-1: {cmc[0]}, Rank-5:{cmc[4]}, Rank-9:{cmc[9]}")
-
+            raise ValueError(f"Unknown task {cfg.task}")
+            exit(1)
