@@ -1,7 +1,5 @@
 _BASE_: ../Base-SBS.yml
 
-SEED: 3394299126733533315
-
 MODEL:
   FREEZE_LAYERS: [ backbone ]
   BACKBONE:
