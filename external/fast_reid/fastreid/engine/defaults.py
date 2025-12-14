@@ -271,6 +271,7 @@ class DefaultTrainer(TrainerBase):
         """
         # The checkpoint stores the training iteration that just finished, thus we start
         # at the next iteration (or iter zero if there's no checkpoint).
+        print("\n\nModel", self.cfg.MODEL.WEIGHTS)
         checkpoint = self.checkpointer.resume_or_load(self.cfg.MODEL.WEIGHTS, resume=resume)
 
         if resume and self.checkpointer.has_checkpoint():
