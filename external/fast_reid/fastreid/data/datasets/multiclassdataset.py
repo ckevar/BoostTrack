@@ -6,7 +6,10 @@ import numpy as np
 def build_pid_map(root_dir, txt_files):
 
     data_name = os.path.dirname(txt_files[0]).split("/")[-1]
-    npz_file = f"{data_name}-pid_map.npz"
+    subset_name = os.path.basename(txt_files[0])
+
+    npz_file = f"{data_name}-{subset_name}-pid_map.npz"
+    print("npz_file", npz_file)
 
     if os.path.isfile(npz_file):
         data = np.load(npz_file)
@@ -54,6 +57,39 @@ def sanitize_data(data):
             continue
         sanitized.append((img_path, pid, camid))
     return sanitized
+
+@DATASET_REGISTRY.register()
+class MulticlassMOT17Train(ImageDataset):
+    dataset_dir = "/home/chris/Documents/Datasets/reid/fastreid/kittire_set"
+    def __init__(self, root="datasets", **kwargs):
+        self.root = os.path.join(root, self.dataset_dir)
+        txt = os.path.join(self.root, "train.txt")
+        pid2label = build_pid_map(root, [txt])
+
+        train = process_txt(self.root, txt, pid2label)
+
+        assert len(train) > 0
+
+        super().__init__(train, None, None, **kwargs)
+
+@DATASET_REGISTRY.register()
+class MulticlassMOT17Eval(ImageDataset):
+    dataset_dir = "/home/chris/Documents/Datasets/reid/fastreid/kittire_set"
+    def __init__(self, root='datasets', **kwargs):
+        self.root = os.path.join(root, self.dataset_dir)
+        # TODO: Edit this to point where the train.txt file is
+        query_txt   = os.path.join(self.root, "query.txt")
+        gallery_txt = os.path.join(self.root, "gallery.txt")
+
+        pid2label = build_pid_map(root, [query_txt, gallery_txt])
+
+        query   = process_txt(self.root, query_txt, pid2label)
+        gallery = process_txt(self.root, gallery_txt, pid2label)
+
+        assert len(query) > 0
+        assert len(gallery) > 0
+
+        super().__init__(None, query, gallery, **kwargs)
 
 @DATASET_REGISTRY.register()
 class MulticlassMOT17(ImageDataset):

@@ -6,8 +6,8 @@ MODEL:
     NAME: build_resnest_backbone
 
 DATASETS:
-  NAMES: ("MulticlassMOT17",)
-  TESTS: ("MulticlassMOT17",)
+  NAMES: ("MulticlassMOT17Train",)
+  TESTS: ("MulticlassMOT17Eval",)
 
 DATALOADER:
   NUM_INSTANCE: 25
