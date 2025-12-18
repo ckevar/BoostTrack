@@ -5,8 +5,11 @@ import numpy as np
 
 def build_pid_map(root_dir, txt_files):
 
-    if os.path.isfile("pid_map.npz"):
-        data = np.load("pid_map.npz")
+    data_name = os.path.dirname(txt_files[0]).split("/")[-1]
+    npz_file = f"{data_name}-pid_map.npz"
+
+    if os.path.isfile(npz_file):
+        data = np.load(npz_file)
         pids = data["pids"]
         labels = data["labels"]
         # It's important to cast pid into int rather than keeping them into np type
@@ -25,11 +28,12 @@ def build_pid_map(root_dir, txt_files):
     pids = np.array(list(pid2label.keys()), dtype=np.int64)
     labels = np.array(list(pid2label.values()), dtype=np.int64)
 
-    np.savez("pid_map.npz", pids=pids, labels=labels)
+    np.savez(npz_file, pids=pids, labels=labels)
 
     return pid2label
 
 def process_txt(root, txt_file, pid2label):
+    print("----- SET", txt_file)
     data = []
     with open(txt_file) as f:
         for line in f:
@@ -53,7 +57,8 @@ def sanitize_data(data):
 
 @DATASET_REGISTRY.register()
 class MulticlassMOT17(ImageDataset):
-    dataset_dir = "/home/chris/Documents/Datasets/reid/fastreid/mot17re_set"
+    dataset_dir = \
+            "/home/chris/Documents/Datasets/reid/fastreid/kittire_set"
 
     def __init__(self, root='datasets', **kwargs):
         self.root = os.path.join(root, self.dataset_dir)

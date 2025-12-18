@@ -8,7 +8,13 @@ import logging
 import os
 
 import torch
+"""Legacy:
 from torch._six import string_classes
+New:
+"""
+string_classes = str
+
+
 """ Legacy
 from collections import Mapping
 """
