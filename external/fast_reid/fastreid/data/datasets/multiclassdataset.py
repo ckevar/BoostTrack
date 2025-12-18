@@ -33,7 +33,7 @@ def build_pid_map(root_dir, txt_files):
     return pid2label
 
 def process_txt(root, txt_file, pid2label):
-    print("----- SET", txt_file)
+
     data = []
     with open(txt_file) as f:
         for line in f:
