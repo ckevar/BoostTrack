@@ -57,8 +57,7 @@ def sanitize_data(data):
 
 @DATASET_REGISTRY.register()
 class MulticlassMOT17(ImageDataset):
-    dataset_dir = \
-            "/home/chris/Documents/Datasets/reid/fastreid/kittire_set"
+    dataset_dir = "/home/chris/Documents/Datasets/reid/fastreid/kittire_set"
 
     def __init__(self, root='datasets', **kwargs):
         self.root = os.path.join(root, self.dataset_dir)
