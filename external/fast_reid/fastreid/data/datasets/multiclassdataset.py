@@ -94,8 +94,8 @@ class MulticlassMOT17Eval(ImageDataset):
 
         pid2label = build_pid_map(root, [query_txt, gallery_txt])
 
-        query   = process_txt(root, query_txt, pid2label, subset="query")
-        gallery = process_txt(root, gallery_txt, pid2label, subset="gallery")
+        query   = process_txt(self.root, query_txt, pid2label, subset="query")
+        gallery = process_txt(self.root, gallery_txt, pid2label, subset="gallery")
 
         assert len(query) > 0
         assert len(gallery) > 0
