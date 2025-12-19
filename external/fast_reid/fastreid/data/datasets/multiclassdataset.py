@@ -9,7 +9,6 @@ def build_pid_map(root_dir, txt_files):
     subset_name = os.path.basename(txt_files[0])
 
     npz_file = f"{data_name}-{subset_name}-pid_map.npz"
-    print("npz_file", npz_file)
 
     if os.path.isfile(npz_file):
         data = np.load(npz_file)
@@ -35,7 +34,14 @@ def build_pid_map(root_dir, txt_files):
 
     return pid2label
 
-def process_txt(root, txt_file, pid2label):
+def process_txt(root, txt_file, pid2label, subset="train"):
+    # The thing is the eval class is created every time, so whatever is stored in the class is recreated. This function is not part of the class, so, it stores it's own attribute and keep data in RAM, because unloading the and parsing the data actually takes a lot of time.
+
+    if hasattr(process_txt, "datasets"):
+        if subset in process_txt.datasets:
+            return process_txt.datasets[subset]
+    else:
+        process_txt.datasets = {}
 
     data = []
     with open(txt_file) as f:
@@ -47,7 +53,12 @@ def process_txt(root, txt_file, pid2label):
                          pid2label[pid], 
                          camid))
 
+    if subset != "train":
+        # We dont need to hold the train values because it exist once
+        process_txt.datasets[subset] = data
+    
     return data
+
 
 def sanitize_data(data):
     sanitized = []
@@ -83,8 +94,8 @@ class MulticlassMOT17Eval(ImageDataset):
 
         pid2label = build_pid_map(root, [query_txt, gallery_txt])
 
-        query   = process_txt(self.root, query_txt, pid2label)
-        gallery = process_txt(self.root, gallery_txt, pid2label)
+        query   = process_txt(root, query_txt, pid2label, subset="query")
+        gallery = process_txt(root, gallery_txt, pid2label, subset="gallery")
 
         assert len(query) > 0
         assert len(gallery) > 0
