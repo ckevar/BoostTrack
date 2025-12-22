@@ -35,7 +35,14 @@ def build_pid_map(root_dir, txt_files):
     return pid2label
 
 def process_txt(root, txt_file, pid2label, subset="train"):
-    # The thing is the eval class is created every time, so whatever is stored in the class is recreated. This function is not part of the class, so, it stores it's own attribute and keep data in RAM, because unloading the and parsing the data actually takes a lot of time.
+    """
+    The Evaluation class is created everytime, so, this query and gallery text
+    files are parsed at every evaluation and it takes some time do to (2.61 secs),
+    which it's not that bad, but if it's called 600 times, then evaluation turns 
+    into something larger. However, the gallery and query aren't that big so, they
+    can actually fit in RAM. So, we attach a dictionary to the function. is this 
+    safe? I dont know. But it makes it way faster.
+    """
 
     if hasattr(process_txt, "datasets"):
         if subset in process_txt.datasets:
@@ -69,12 +76,19 @@ def sanitize_data(data):
         sanitized.append((img_path, pid, camid))
     return sanitized
 
+class DatasetPaths(object):
+    PATH = "/home/chris/Documents/Datasets/reid/fastreid/kittire_set"
+    TRAIN_MAP = "train.txt"
+    QUERY_MAP = "query.txt"
+    GALLERY_MAP = "gallery.txt"
+ 
 @DATASET_REGISTRY.register()
 class MulticlassMOT17Train(ImageDataset):
-    dataset_dir = "/home/chris/Documents/Datasets/reid/fastreid/kittire_set"
     def __init__(self, root="datasets", **kwargs):
-        self.root = os.path.join(root, self.dataset_dir)
-        txt = os.path.join(self.root, "train.txt")
+        dataset = DatasetPaths()
+
+        self.root = os.path.join(root, dataset.PATH)
+        txt = os.path.join(self.root, dataset.TRAIN_MAP)
         pid2label = build_pid_map(root, [txt])
 
         train = process_txt(self.root, txt, pid2label)
@@ -85,12 +99,12 @@ class MulticlassMOT17Train(ImageDataset):
 
 @DATASET_REGISTRY.register()
 class MulticlassMOT17Eval(ImageDataset):
-    dataset_dir = "/home/chris/Documents/Datasets/reid/fastreid/kittire_set"
-    def __init__(self, root='datasets', **kwargs):
-        self.root = os.path.join(root, self.dataset_dir)
-        # TODO: Edit this to point where the train.txt file is
-        query_txt   = os.path.join(self.root, "query.txt")
-        gallery_txt = os.path.join(self.root, "gallery.txt")
+   def __init__(self, root='datasets', **kwargs):
+        dataset = DatasetPaths()
+
+        self.root = os.path.join(root, dataset.PATH)
+        query_txt   = os.path.join(self.root, dataset.QUERY_MAP)
+        gallery_txt = os.path.join(self.root, dataset.GALLERY_MAP)
 
         pid2label = build_pid_map(root, [query_txt, gallery_txt])
 
@@ -104,13 +118,14 @@ class MulticlassMOT17Eval(ImageDataset):
 
 @DATASET_REGISTRY.register()
 class MulticlassMOT17(ImageDataset):
-    dataset_dir = "/home/chris/Documents/Datasets/reid/fastreid/kittire_set"
     def __init__(self, root='datasets', **kwargs):
-        self.root = os.path.join(root, self.dataset_dir)
+        dataset = DatasetPaths()
+
+        self.root = os.path.join(root, dataset.PATH)
         # TODO: Edit this to point where the train.txt file is
-        train_txt   = os.path.join(self.root, "train.txt")
-        query_txt   = os.path.join(self.root, "query.txt")
-        gallery_txt = os.path.join(self.root, "gallery.txt")
+        train_txt   = os.path.join(self.root, dataset.TRAIN_MAP)
+        query_txt   = os.path.join(self.root, dataset.QUERY_MAP)
+        gallery_txt = os.path.join(self.root, dataset.GALLERY_MAP)
 
         pid2label = build_pid_map(root, [train_txt, query_txt, gallery_txt])
 

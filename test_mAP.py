@@ -373,9 +373,10 @@ def extract_save_features_for_dists(cfg):
     feats, ids = __extract_features_for_dists(cfg)
     feats = feats.numpy()
     ids = ids.numpy()
-    np.savez_compressed(f"{cfg.out_dir}/{cfg.out_file}-features.npz",
-                        feats = feats,
-                        ids = ids
+    np.savez_compressed(
+        f"{cfg.out_dir}/{cfg.out_file}-features.npz",
+        feats = feats,
+        ids = ids
     )
 
 
@@ -572,6 +573,7 @@ if "__main__" == __name__:
     cfg = get_config()
 
     match cfg.task:
+        # -- mAP -- #
         case "mAP-from-dataset":
             mAP_from_dataset(cfg)
 
@@ -580,6 +582,8 @@ if "__main__" == __name__:
 
         case "mAP-from-features":
             mAP_from_feats(cfg)
+
+        # -- Hard ID mining -- #
 
         case "distances-from-dataset":
             distances_from_dataset(cfg)
