@@ -6,8 +6,8 @@ MODEL:
     NAME: build_resnest_backbone
 
 DATASETS:
-  NAMES: ("MulticlassMOT17",)
-  TESTS: ("MulticlassMOT17",)
+  NAMES: ("MulticlassMOT17Train",)
+  TESTS: ("MulticlassMOT17Eval",)
 
 DATALOADER:
   NUM_INSTANCE: 25
@@ -19,6 +19,7 @@ SOLVER:
   WARMUP_FACTOR: 1.0
   WARMUP_METHOD: "none"
   IMS_PER_BATCH: 100 # Fits in a 15GB GPU
+  MAX_EPOCHS: 60
   AMP:
     ENABLED: False
 
