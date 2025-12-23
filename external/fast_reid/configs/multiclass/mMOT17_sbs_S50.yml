@@ -1,10 +1,10 @@
 _BASE_: ../Base-SBS.yml
 
 MODEL:
-  # FREEZE_LAYERS: [ backbone ]
+  FREEZE_LAYERS: [ backbone ]
   BACKBONE:
     NAME: build_resnest_backbone
-    FREEZE_AT: 5
+    NORM: FrozenBN
 
 DATASETS:
   NAMES: ("MulticlassMOT17Train",)
