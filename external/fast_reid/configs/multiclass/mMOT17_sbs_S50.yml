@@ -4,7 +4,7 @@ MODEL:
   FREEZE_LAYERS: [ backbone ]
   BACKBONE:
     NAME: build_resnest_backbone
-    NORM: FrozenBN
+    NORM: BN
 
 DATASETS:
   NAMES: ("MulticlassMOT17Train",)
