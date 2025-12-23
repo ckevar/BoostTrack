@@ -1,7 +1,8 @@
 _BASE_: ../Base-SBS.yml
 
 MODEL:
-  FREEZE_LAYERS: [ backbone ]
+  # FREEZE_LAYERS: [ backbone ]
+  FREEZE_AT: 5
   BACKBONE:
     NAME: build_resnest_backbone
 
