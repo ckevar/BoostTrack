@@ -290,10 +290,7 @@ def __compute_cmc_map_in_gpu(query_feats, query_ids,
     for i in range(len(query_feats)):
         queryf = query_feats[i:i+1]
 
-        """
-        if i % step_print == 0:
-            print(f"{i}/{len_query_feats}")
-        """
+        # Uncomment this for large datasets if i % step_print == 0: print(f"{i}/{len_query_feats}")
 
         # Cos distance
         for j in range(0, len_gallery_feats, batch_size):
