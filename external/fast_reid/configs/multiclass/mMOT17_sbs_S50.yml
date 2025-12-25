@@ -5,6 +5,9 @@ MODEL:
   BACKBONE:
     NAME: build_resnest_backbone
     NORM: BN
+  LOSSES:
+    TRI:
+      MARGIN: 0.0
 
 DATASETS:
   NAMES: ("MulticlassMOT17Train",)
