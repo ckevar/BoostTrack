@@ -290,8 +290,10 @@ def __compute_cmc_map_in_gpu(query_feats, query_ids,
     for i in range(len(query_feats)):
         queryf = query_feats[i:i+1]
 
+        """
         if i % step_print == 0:
             print(f"{i}/{len_query_feats}")
+        """
 
         # Cos distance
         for j in range(0, len_gallery_feats, batch_size):
@@ -407,7 +409,7 @@ def mAP_from_feats(cfg):
             G_feats, G_ids,
             batch_size=cfg.batch_sz_mAP)
 
-    print(f"\nmAP: {mAP}, Rank-1: {cmc[0]}, Rank-5:{cmc[4]}, Rank-9:{cmc[9]}")
+    print(f"\nmAP {mAP}| Rank-1 {cmc[0]}| Rank-5 {cmc[4]}| Rank-9 {cmc[9]}")
 
 def extract_save_features_for_mAP(cfg):
 
