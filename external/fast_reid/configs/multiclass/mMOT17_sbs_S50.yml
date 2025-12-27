@@ -6,6 +6,7 @@ MODEL:
     NAME: build_resnest_backbone
     NORM: BN
   LOSSES:
+    NAME: ('TripletLoss')
     TRI:
       MARGIN: 0.0
 
