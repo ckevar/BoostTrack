@@ -158,9 +158,23 @@ def ___row_distances(feats, feats_mean, inverse_indices):
     row_distances = 1 - dot_product
     return row_distances
 
-def __mean_feats_vectorized(feats, ids):
-    uniq_ids, inverse_indices = torch.unique(ids, return_inverse=True)
+def ___unique_ids(ids):
+    gpu_ids = ids.to("cuda")
+
+    uniq_ids, inverse_indices = torch.unique(gpu_ids, return_inverse=True)
     num_groups = uniq_ids.size(0)
+    
+    del gpu_ids
+
+    return uniq_ids, inverse_indices, num_groups
+
+def __mean_feats_vectorized(feats_cpu, ids_cpu):
+
+    uniq_ids, inverse_indices, num_groups = ___unique_ids(ids_cpu)
+    del ids_cpu
+
+
+    feats = feats_cpu.to("cuda")
 
     # -- Centered Features -- #
     feats_mean, counts = ___centered_features(feats, inverse_indices, num_groups)
@@ -168,10 +182,12 @@ def __mean_feats_vectorized(feats, ids):
     # -- Compute Distances -- #
     row_distances = ___row_distances(feats, feats_mean, inverse_indices)
 
+    del feats
+
     # -- Average, min, max distances -- #
-    sum_dist = torch.zeros(num_groups, device=feats.device, dtype=feats_mean.dtype)
-    max_dist = torch.empty(num_groups, device=feats.device, dtype=feats_mean.dtype)
-    min_dist = torch.empty(num_groups, device=feats.device, dtype=feats_mean.dtype)
+    sum_dist = torch.zeros(num_groups, device="cuda", dtype=feats_mean.dtype)
+    max_dist = torch.empty(num_groups, device="cuda", dtype=feats_mean.dtype)
+    min_dist = torch.empty(num_groups, device="cuda", dtype=feats_mean.dtype)
 
     max_dist.fill_(float('-inf'))
     min_dist.fill_(float('inf'))
@@ -224,8 +240,8 @@ def __save_inter(file, c_ids, d_ids, dists):
 def __compute_distances(cfg, feats, ids):
     
     # IMPORTANT! to do it in cuda, otherwise, it takes an eternity all these computations.
-    feats = feats.to("cuda")
-    ids = ids.to("cuda")
+    #feats = feats.to("cuda")
+    #ids = ids.to("cuda")
 
     print("Computing intra ID distances...")
     u_ids, feats_mean, dists, min_d, max_d = __mean_feats_vectorized(feats, ids)
@@ -374,8 +390,8 @@ def distances_from_dataset(cfg):
 def distances_from_features(cfg):
     data = np.load(cfg.features)
 
-    feats = torch.from_numpy(data['feats']).to("cuda")
-    ids = torch.from_numpy(data['ids']).to("cuda")
+    feats = torch.from_numpy(data['feats'])
+    ids = torch.from_numpy(data['ids'])
 
     __compute_distances(cfg, feats, ids)
     
