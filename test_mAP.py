@@ -152,7 +152,11 @@ def ___centered_features(feats, inverse_indices, num_groups):
 
     return feats_mean, counts
 
-
+def ___row_distances(feats, feats_mean, inverse_indices):
+    expanded_means = feats_mean[inverse_indices]
+    dot_product = (feats * expanded_means).sum(1)
+    row_distances = 1 - dot_product
+    return row_distances
 
 def __mean_feats_vectorized(feats, ids):
     uniq_ids, inverse_indices = torch.unique(ids, return_inverse=True)
@@ -161,15 +165,8 @@ def __mean_feats_vectorized(feats, ids):
     # -- Centered Features -- #
     feats_mean, counts = ___centered_features(feats, inverse_indices, num_groups)
 
-    #sum_feats = torch.zeros(num_groups, feats.size(1), device=feats.device, dtype=feats.dtype)
-    #sum_feats.index_add_(0, inverse_indices, feats)
-    #counts = torch.bincount(inverse_indices).float().unsqueeze(1)
-    #feats_mean = sum_feats / counts
-
     # -- Compute Distances -- #
-    expanded_means = feats_mean[inverse_indices]
-    dot_product = (feats * expanded_means).sum(1)
-    row_distances = 1 - dot_product
+    row_distances = ___row_distances(feats, feats_mean, inverse_indices)
 
     # -- Average, min, max distances -- #
     sum_dist = torch.zeros(num_groups, device=feats.device, dtype=feats_mean.dtype)
@@ -183,7 +180,7 @@ def __mean_feats_vectorized(feats, ids):
     max_dist.scatter_reduce_(0, inverse_indices, row_distances, reduce='amax', include_self=False)
     min_dist.scatter_reduce_(0, inverse_indices, row_distances, reduce='amin', include_self=False)
 
-    dist = sum_dist / counts.squeeze()
+    sum_dist = sum_dist / counts.squeeze()
 
     # -- Sort IDs by average distances -- #
     sorted_idx = torch.argsort(dist, descending=True)
