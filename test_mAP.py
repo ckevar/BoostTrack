@@ -140,18 +140,31 @@ def __extract_features_for_dists(cfg):
 
 ## -- Utils for __compute_distances  -- ##
 
-def __mean_feats_vectorized(feats, ids):
-    uniq_ids, inverse_indices = torch.unique(ids, return_inverse=True)
-    num_groups = uniq_ids.size(0)
-
-    # -- Centered Features -- #
+def ___centered_features(feats, inverse_indices, num_groups):
     sum_feats = torch.zeros(num_groups, feats.size(1), device=feats.device, dtype=feats.dtype)
     sum_feats.index_add_(0, inverse_indices, feats)
 
     counts = torch.bincount(inverse_indices).float().unsqueeze(1)
 
     feats_mean = sum_feats / counts
+
     del sum_feats
+
+    return feats_mean, counts
+
+
+
+def __mean_feats_vectorized(feats, ids):
+    uniq_ids, inverse_indices = torch.unique(ids, return_inverse=True)
+    num_groups = uniq_ids.size(0)
+
+    # -- Centered Features -- #
+    feats_mean, counts = ___centered_features(feats, inverse_indices, num_groups)
+
+    #sum_feats = torch.zeros(num_groups, feats.size(1), device=feats.device, dtype=feats.dtype)
+    #sum_feats.index_add_(0, inverse_indices, feats)
+    #counts = torch.bincount(inverse_indices).float().unsqueeze(1)
+    #feats_mean = sum_feats / counts
 
     # -- Compute Distances -- #
     expanded_means = feats_mean[inverse_indices]
