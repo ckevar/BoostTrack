@@ -183,10 +183,10 @@ def __mean_feats_vectorized(feats, ids):
     sum_dist = sum_dist / counts.squeeze()
 
     # -- Sort IDs by average distances -- #
-    sorted_idx = torch.argsort(dist, descending=True)
+    sorted_idx = torch.argsort(sum_dist, descending=True)
     uniq_ids = uniq_ids[sorted_idx]
     feats_mean = feats_mean[sorted_idx]
-    dist = dist[sorted_idx]
+    sum_dist = sum_dist[sorted_idx]
     min_dist = min_dist[sorted_idx]
     max_dist = max_dist[sorted_idx]
 
