@@ -214,7 +214,7 @@ def ___unique_ids_cpu(ids):
     
     del gpu_ids
 
-    return uniq_ids.to("cpu"), inverse_indices.to("cpu"), num_groups.to("cpu")
+    return uniq_ids.to("cpu"), inverse_indices.to("cpu"), num_groups
 
 def __mean_feats_vectorized_chunks(feats_cpu, ids_cpu):
 
