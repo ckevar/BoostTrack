@@ -190,7 +190,7 @@ def __mean_feats_vectorized(feats, ids):
     min_dist = min_dist[sorted_idx]
     max_dist = max_dist[sorted_idx]
 
-    return uniq_ids, feats_mean, dist, min_dist, max_dist
+    return uniq_ids, feats_mean, sum_dist, min_dist, max_dist
 
 
 def __inter_id_dists_vectorized(anchor_feats, anchor_ids):
