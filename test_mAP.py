@@ -180,7 +180,7 @@ def ___row_distances(feats, feats_mean, inverse_indices):
 def ___row_distances_cpu(feats, feats_mean_cpu, inverse_indices_cpu):
     
     feats_mean = feats_mean_cpu.to("cuda")
-    inverse_indices = inverse_indices.to("cuda")
+    inverse_indices = inverse_indices_cpu.to("cuda")
 
     expanded_means = feats_mean[inverse_indices]
 
