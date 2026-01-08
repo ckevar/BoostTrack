@@ -151,6 +151,7 @@ def __mean_feats_vectorized(feats, ids):
     counts = torch.bincount(inverse_indices).float().unsqueeze(1)
 
     feats_mean = sum_feats / counts
+    del sum_feats
 
     # -- Compute Distances -- #
     expanded_means = feats_mean[inverse_indices]
