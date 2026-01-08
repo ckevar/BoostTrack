@@ -140,15 +140,12 @@ def __extract_features_for_dists(cfg):
 
 ## -- Utils for __compute_distances  -- ##
 
-def ___centered_features_cpu(feats, inverse_indices_cpu, num_groups_cpu):
-    num_groups = num_groups_cpu.to("cuda")
+def ___centered_features_cpu(feats, inverse_indices_cpu, num_groups):
 
     sum_feats = torch.zeros(num_groups, feats.size(1), device=feats.device, dtype=feats.dtype)
-    del num_groups
 
     inverse_indices = inverse_indices_cpu.to("cuda")
     sum_feats.index_add_(0, inverse_indices, feats)
-
     counts = torch.bincount(inverse_indices).float().unsqueeze(1)
     del inverse_indices
 
