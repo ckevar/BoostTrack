@@ -191,6 +191,9 @@ def ___row_distances_cpu(feats, feats_mean_cpu, inverse_indices_cpu):
 
     dot_product = (feats * expanded_means).sum(1)
     row_distances = 1 - dot_product
+
+    del dot_product, expanded_means
+
     return row_distances
 
 def ___unique_ids(ids):
