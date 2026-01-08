@@ -373,12 +373,10 @@ def extract_save_features_for_dists(cfg):
     feats = feats.numpy()
     ids = ids.numpy()
     np.savez_compressed(
-        f"{cfg.out_dir}/{cfg.out_file}-features.npz",
+        f"{cfg.out_file}-features.npz",
         feats = feats,
         ids = ids
     )
-
-
 
 def mAP_from_dataset(cfg):
 
@@ -389,7 +387,7 @@ def mAP_from_dataset(cfg):
             G_feats, G_ids,
             batch_size=cfg.batch_sz_mAP)
 
-    print(f"\nmAP: {mAP}, Rank-1: {cmc[0]}, Rank-5:{cmc[4]}, Rank-9:{cmc[9]}")
+    print(f"\nmAP: {mAP}| Rank-1: {cmc[0]}| Rank-5: {cmc[4]}| Rank-9: {cmc[8]}")
 
 def mAP_from_feats(cfg):
 
@@ -559,7 +557,9 @@ def get_config():
 
         case _:
             raise Exception("Uknown task {cfg.task}")
-
+    
+    if not os.path.isdir(cfg.out_dir):
+        raise ValueError(f"Output dir {cfg.out_dir} doesn't exist.")
     
     # -- Distance Files -- #
     if "distances" in cfg.task:
