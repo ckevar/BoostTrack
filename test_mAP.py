@@ -140,23 +140,7 @@ def __extract_features_for_dists(cfg):
 
 ## -- Utils for __compute_distances  -- ##
 
-def ___centered_features_cpu(feats, inverse_indices_cpu, num_groups):
-
-    sum_feats = torch.zeros(num_groups, feats.size(1), device=feats.device, dtype=feats.dtype)
-
-    inverse_indices = inverse_indices_cpu.to("cuda")
-    sum_feats.index_add_(0, inverse_indices, feats)
-    counts = torch.bincount(inverse_indices).float().unsqueeze(1)
-    del inverse_indices
-
-    feats_mean = sum_feats / counts
-    del sum_feats
-
-    return feats_mean.to("cpu"), counts.to("cpu")
-
-def ___centered_features(feats, inverse_indices_cpu, num_groups_cpu):
-    inverse_indices = inverse_indices_cpu.to("cuda")
-    num_groups = num_groups_cpu.to("cuda")
+def ___centered_features(feats, inverse_indices, num_groups):
 
     sum_feats = torch.zeros(num_groups, feats.size(1), device=feats.device, dtype=feats.dtype)
     sum_feats.index_add_(0, inverse_indices, feats)
@@ -173,23 +157,52 @@ def ___centered_features(feats, inverse_indices_cpu, num_groups_cpu):
 
 def ___row_distances(feats, feats_mean, inverse_indices):
     expanded_means = feats_mean[inverse_indices]
+
+    if "cpu" in feats.device:
+        feats = feats.to("cuda")
+ 
     dot_product = (feats * expanded_means).sum(1)
     row_distances = 1 - dot_product
     return row_distances
 
-def ___row_distances_cpu(feats, feats_mean_cpu, inverse_indices_cpu):
-    
-    feats_mean = feats_mean_cpu.to("cuda")
-    inverse_indices = inverse_indices_cpu.to("cuda")
 
-    expanded_means = feats_mean[inverse_indices]
+def ___row_distances_2gpu(feats_cpu, feats_mean, inverse_indices):
+    if "cuda" in feats_cpu.device:
+        feats_cpu = feats_cpu.to("cpu")
+    #feats_mean2 = feat_mean.to("cuda")
+    #inverse_indices2 = inverse_indices.to("cuda")
 
-    del inverse_indices, feats_mean
+    expanded_means = feats_mean[inverse_indices] # expanded_means the same size as feats_cpu
 
-    dot_product = (feats * expanded_means).sum(1)
-    row_distances = 1 - dot_product
+    #del feats_mean2, inverse_indices2
 
-    del dot_product, expanded_means
+    expanded_means = expanded_means.to("cpu")
+
+    # Streaming Multiplication
+    N = feats_cpu.size(0)
+    device = "cuda:0"
+    row_distances = torch.empty(N, feats.size(1), device=device, dtype=feats_cpu.dtype)
+
+    batch_sz = 100000 # This can be part of configuration
+
+    for i in range(0, N, batch_sz):
+
+        # Define the slice
+        end = min(i + batch_sz, N)
+
+        # Move batches to GPU
+        batch_1 = feats[i:end].to(device)
+        batch_2 = expanded_means[i:end].to(devices)
+
+        # COmpute on GPU and keep them
+        batch_r = batch_1 * batch_2
+        row_distances[i:end] = batch_r
+
+        # Free GPU
+        del batch_1,  batch_2, batch_r
+
+    row_distances = row_distances.sum(1)
+    row_distances = 1 - row_distances
 
     return row_distances
 
@@ -203,72 +216,23 @@ def ___unique_ids(ids):
 
     return uniq_ids, inverse_indices, num_groups
 
-def ___unique_ids_cpu(ids):
-    gpu_ids = ids.to("cuda")
+def __mean_feats_vectorized(feats, ids):
 
-    uniq_ids, inverse_indices = torch.unique(gpu_ids, return_inverse=True)
-    num_groups = uniq_ids.size(0)
-    
-    del gpu_ids
+    uniq_ids, inverse_indices, num_groups = ___unique_ids(ids)
 
-    return uniq_ids.to("cpu"), inverse_indices.to("cpu"), num_groups
-
-def __mean_feats_vectorized_chunks(feats_cpu, ids_cpu):
-
-    uniq_ids, inverse_indices, num_groups = ___unique_ids_cpu(ids_cpu)
-    del ids_cpu
-
-    feats = feats_cpu.to("cuda")
-
-    # -- Centered Features -- #
-    feats_mean, counts = ___centered_features_cpu(feats, inverse_indices, num_groups)
-
-    # -- Compute Distances -- #
-    row_distances = ___row_distances_cpu(feats, feats_mean, inverse_indices)
-
-    del feats
-
-    # -- Average, min, max distances -- #
-    sum_dist = torch.zeros(num_groups, device="cuda", dtype=feats_mean.dtype)
-    max_dist = torch.empty(num_groups, device="cuda", dtype=feats_mean.dtype)
-    min_dist = torch.empty(num_groups, device="cuda", dtype=feats_mean.dtype)
-
-    max_dist.fill_(float('-inf'))
-    min_dist.fill_(float('inf'))
-
-    sum_dist.index_add_(0, inverse_indices, row_distances)
-    max_dist.scatter_reduce_(0, inverse_indices, row_distances, reduce='amax', include_self=False)
-    min_dist.scatter_reduce_(0, inverse_indices, row_distances, reduce='amin', include_self=False)
-
-    sum_dist = sum_dist / counts.squeeze()
-
-    # -- Sort IDs by average distances -- #
-    sorted_idx = torch.argsort(sum_dist, descending=True)
-    uniq_ids = uniq_ids[sorted_idx]
-    feats_mean = feats_mean[sorted_idx]
-    sum_dist = sum_dist[sorted_idx]
-    min_dist = min_dist[sorted_idx]
-    max_dist = max_dist[sorted_idx]
-
-    return uniq_ids, feats_mean, sum_dist, min_dist, max_dist
-
-
-
-def __mean_feats_vectorized(feats_cpu, ids_cpu):
-
-    uniq_ids, inverse_indices, num_groups = ___unique_ids(ids_cpu)
-    del ids_cpu
-
-
-    feats = feats_cpu.to("cuda")
-
+    feats = feats.to("cuda")
     # -- Centered Features -- #
     feats_mean, counts = ___centered_features(feats, inverse_indices, num_groups)
 
+    if cfg.num_devices == 1:
     # -- Compute Distances -- #
-    row_distances = ___row_distances(feats, feats_mean, inverse_indices)
-
-    del feats
+        row_distances = ___row_distances(feats, feats_mean, inverse_indices)
+    elif cfg.num_devices == 2:
+        feats = feats.to("cpu")
+        row_distances = ___row_distances_2gpu(feats, feats_mean, inverse_indices)
+    else:
+        del feats, uniq_ids, inverse_indices, num_groups, ids
+        raise ValueError(f"Number of devices {cfg.num_devices} not supported. min: 1, max: 2.")
 
     # -- Average, min, max distances -- #
     sum_dist = torch.zeros(num_groups, device="cuda", dtype=feats_mean.dtype)
@@ -323,39 +287,18 @@ def __save_inter(file, c_ids, d_ids, dists):
         for ci, di, dd in zip(c_ids, d_ids, dists):
             fd.write(f"{ci} {di} {dd:.6f}\n")
 
+
+
 def __compute_distances(cfg, feats, ids):
     
-    # IMPORTANT! to do it in cuda, otherwise, it takes an eternity all these computations.
-    #feats = feats.to("cuda")
-    #ids = ids.to("cuda")
-
     print("Computing intra ID distances...")
-    u_ids, feats_mean, dists, min_d, max_d = __mean_feats_vectorized(feats, ids)
-
-    print("Computing inter ID distances...")
-    confused_ids, distractor_ids, confusing_d = __inter_id_dists_vectorized(feats_mean, u_ids)
-
-    print(f"Saving in {cfg.out_file}")
-    u_ids = u_ids.to("cpu").numpy()
-    dists = dists.to("cpu").numpy()
-    min_d = min_d.to("cpu").numpy()
-    max_d = max_d.to("cpu").numpy()
-    confused_ids = confused_ids.to("cpu").numpy()
-    distractor_ids = distractor_ids.to("cpu").numpy()
-    confusing_d = confusing_d.to("cpu").numpy()
-
-    __save_intra(cfg.out_file, u_ids, dists, min_d, max_d)
-    __save_inter(cfg.out_file, confused_ids, distractor_ids, confusing_d)
-
-def __compute_distances_chunks(cfg, feats, ids):
     
-    # IMPORTANT! to do it in cuda, otherwise, it takes an eternity all these computations.
-    #feats = feats.to("cuda")
-    #ids = ids.to("cuda")
-
-    print("Computing intra ID distances...")
-    u_ids, feats_mean, dists, min_d, max_d = __mean_feats_vectorized_chunks(feats, ids)
-
+    if cfg.num_devices == 1:
+        u_ids, feats_mean, dists, min_d, max_d = __mean_feats_vectorized(feats, ids)
+    elif cfg.num_devices == 2:
+        u_ids, feats_mean, dists, min_d, max_d = __mean_feats_vectorized_2gpus(feats, ids)
+    else:
+        raise ValueError(f"Number of devices {cfg.num_devs} not supported. min: 1, max: 2.")
     print("Computing inter ID distances...")
     confused_ids, distractor_ids, confusing_d = __inter_id_dists_vectorized(feats_mean, u_ids)
 
@@ -370,9 +313,6 @@ def __compute_distances_chunks(cfg, feats, ids):
 
     __save_intra(cfg.out_file, u_ids, dists, min_d, max_d)
     __save_inter(cfg.out_file, confused_ids, distractor_ids, confusing_d)
-
-
-
 
 # -- Utils for mAP -- #
 def __load_dataset_for_mAP(cfg):
@@ -502,10 +442,10 @@ def distances_from_dataset(cfg):
 def distances_from_features(cfg):
     data = np.load(cfg.features)
 
-    feats = torch.from_numpy(data['feats'])
     ids = torch.from_numpy(data['ids'])
+    feats = torch.from_numpy(data['feats'])
 
-    __compute_distances_chunks(cfg, feats, ids)
+    __compute_distances(cfg, feats, ids)
     
 def extract_save_features_for_dists(cfg):
     feats, ids = __extract_features_for_dists(cfg)
@@ -615,6 +555,11 @@ def get_config():
                         default=2048, # This is usually the case.
                         help="2048 is usually the case in fastreid models. But it might vary."
                         )
+
+    parser.add_argument("--num_devices",
+                        type=int,
+                        default=1,
+                        help="Number of devices.")
 
     cfg = parser.parse_args()
 
@@ -731,7 +676,7 @@ if "__main__" == __name__:
 
         case "distances-from-features":
             distances_from_features(cfg)
-            
+
         case _:
             raise ValueError(f"Unknown task {cfg.task}")
             exit(1)
