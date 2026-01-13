@@ -1,6 +1,6 @@
 import argparse
-from torch.utils.data import Dataset, DataLoader
 import torch
+from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 import os
 from PIL import Image
@@ -31,6 +31,7 @@ class ReIDListDataset(Dataset):
             label_map = {pid: idx for idx, pid in enumerate(sorted(set(pid for _, pid, _ in self.samples)))}
             self.relabel(label_map)
 
+        self.i = 0
     def relabel(self, label_map):
         self.label_map = label_map
         new_samples = []
@@ -156,25 +157,36 @@ def ___centered_features(feats, inverse_indices, num_groups):
 
 
 def ___row_distances(feats, feats_mean, inverse_indices):
+    """
+    reqs:
+     - feats: normalized, either in cpu or gpu
+     - feats_mean (centroids): normalized, in gpu
+     - inverse_indices: in gpu
+    """
+
     expanded_means = feats_mean[inverse_indices]
 
-    if "cpu" in feats.device:
-        feats = feats.to("cuda")
+    if "cpu" in feats.device.type: feats = feats.to("cuda")
  
     dot_product = (feats * expanded_means).sum(1)
     row_distances = 1 - dot_product
+
     return row_distances
 
 
 def ___row_distances_2gpu(feats_cpu, feats_mean, inverse_indices):
-    if "cuda" in feats_cpu.device:
-        feats_cpu = feats_cpu.to("cpu")
-    #feats_mean2 = feat_mean.to("cuda")
-    #inverse_indices2 = inverse_indices.to("cuda")
+
+    """
+    reqs:
+     - feats_cpu: normalized, either in cpu or gpu
+     - feats_mean (centroids): normalized, in gpu
+     - inverse_indices: in gpu
+    """
+
+
+    if "cuda" in feats_cpu.device.type: feats_cpu = feats_cpu.to("cpu")
 
     expanded_means = feats_mean[inverse_indices] # expanded_means the same size as feats_cpu
-
-    #del feats_mean2, inverse_indices2
 
     expanded_means = expanded_means.to("cpu")
 
@@ -216,18 +228,26 @@ def ___unique_ids(ids):
 
     return uniq_ids, inverse_indices, num_groups
 
-def __mean_feats_vectorized(feats, ids):
+def __mean_feats_vectorized(feats, ids, num_gpus=1, penalized=False):
+
+    """
+    reqs:
+    - feats: in cpu
+    - ids: in cpu
+    """
 
     uniq_ids, inverse_indices, num_groups = ___unique_ids(ids)
 
     feats = feats.to("cuda")
     # -- Centered Features -- #
     feats_mean, counts = ___centered_features(feats, inverse_indices, num_groups)
-
-    if cfg.num_devices == 1:
+    if not penalized:
+        feats_mean = torch.nn.functional.normalize(feats_mean, p=2, dim=1)
+    
     # -- Compute Distances -- #
+    if num_gpus == 1:
         row_distances = ___row_distances(feats, feats_mean, inverse_indices)
-    elif cfg.num_devices == 2:
+    elif num_gpus == 2:
         feats = feats.to("cpu")
         row_distances = ___row_distances_2gpu(feats, feats_mean, inverse_indices)
     else:
@@ -256,63 +276,92 @@ def __mean_feats_vectorized(feats, ids):
     min_dist = min_dist[sorted_idx]
     max_dist = max_dist[sorted_idx]
 
+    if penalized:
+        feats_mean = torch.nn.functional.normalize(feats_mean, p=2, dim=1)
+
     return uniq_ids, feats_mean, sum_dist, min_dist, max_dist
 
 
-def __inter_id_dists_vectorized(anchor_feats, anchor_ids):
-    dist = 1 - anchor_feats @ anchor_feats.T # Tensor size patches x ids
+def __inter_id_dists_vectorized(feats, feat_ids, centroids, centroid_ids):
+    if feats.device.type == "cpu": feats = feats.to("cuda")
+    if centroids.device.type == "cpu": centroids = centroids.to("cuda")
+
+    dist = 1 - feats @ centroids.T # Tensor size patches x ids
+
+    centroids = centroids.to("cpu")
+    feats = feats.to("cpu")
+
     min_dist, min_indices = torch.min(dist, dim=1)
 
-    row_indices = torch.arange(dist.size(0), device=dist.device)
-    mask = min_indices != row_indices 
+    # Centroids
+    if centroid_ids.device.type == "cpu": centroid_ids = centroid_ids.to("cuda")
+    predicted_closest_ids = centroid_ids[min_indices]
+    centroid_ids.to("cpu")
 
-    confused_ids = anchor_ids[mask]
-    distractor_ids = anchor_ids[min_indices][mask]
+    # Hard Positives
+    if feat_ids.device.type == "cpu": feat_ids = feat_ids.to("cuda")
+    mask = predicted_closest_ids != feat_ids
+    confused_img_ids = feat_ids[mask]
+    feat_ids = feat_ids.to("cpu")
 
+    patch_row = torch.argwhere(mask).squeeze(1) + 1
+
+    # Hard Negatives
+    distractor_ids = predicted_closest_ids[mask]
     confusing_dist = min_dist[mask]
 
-    return confused_ids, distractor_ids, confusing_dist
+    return confused_img_ids, distractor_ids, confusing_dist, patch_row
 
-def __save_intra(file, ids, dists, min_d, max_d):
-    filename = f"{file}-intra-dist.txt"
+def __save_intra(file, ids, dists, min_d, max_d, penalized=False):
+
+    filename = "{}-intra-dist{}".format(
+            file, 
+            "-penalized.txt" if penalized else ".txt")
+
     with open(filename, 'w') as fd:
         fd.write("# id mean_dist min_dist max_dist\n")
         for i, d, md, MD in zip(ids, dists, min_d, max_d):
             fd.write(f"{i} {d:.6f} {md:.6f} {MD:.6f}\n")
 
-def __save_inter(file, c_ids, d_ids, dists):
+def __save_inter(file, c_ids, d_ids, dists, rows):
     filename = f"{file}-inter-dist.txt"
     with open(filename, 'w') as fd:
         fd.write("# confused_id distractor_id confusing_dist\n")
-        for ci, di, dd in zip(c_ids, d_ids, dists):
-            fd.write(f"{ci} {di} {dd:.6f}\n")
-
-
+        for ci, di, dd, row in zip(c_ids, d_ids, dists, rows):
+            fd.write(f"{ci} {di} {dd:.6f} {row}\n")
 
 def __compute_distances(cfg, feats, ids):
     
     print("Computing intra ID distances...")
-    
-    if cfg.num_devices == 1:
-        u_ids, feats_mean, dists, min_d, max_d = __mean_feats_vectorized(feats, ids)
-    elif cfg.num_devices == 2:
-        u_ids, feats_mean, dists, min_d, max_d = __mean_feats_vectorized_2gpus(feats, ids)
-    else:
-        raise ValueError(f"Number of devices {cfg.num_devs} not supported. min: 1, max: 2.")
+    u_ids, feats_mean, dists, min_d, max_d = __mean_feats_vectorized(
+            feats, 
+            ids, 
+            num_gpus=cfg.num_devices,
+            penalized=cfg.penalized)
+
+    u_ids_cpu = u_ids.to("cpu").numpy()
+    dists     = dists.to("cpu").numpy()
+    min_d     = min_d.to("cpu").numpy()
+    max_d     = max_d.to("cpu").numpy()
+
+    __save_intra(cfg.out_file, u_ids, dists, min_d, max_d, penalized=cfg.penalized)
+    del u_ids_cpu, dists, min_d, max_d
+
     print("Computing inter ID distances...")
-    confused_ids, distractor_ids, confusing_d = __inter_id_dists_vectorized(feats_mean, u_ids)
+    confused_ids, distractor_ids, confusing_d, patch_row = __inter_id_dists_vectorized(
+            feats, 
+            ids, 
+            feats_mean, 
+            u_ids)
 
-    print(f"Saving in {cfg.out_file}")
-    u_ids = u_ids.to("cpu").numpy()
-    dists = dists.to("cpu").numpy()
-    min_d = min_d.to("cpu").numpy()
-    max_d = max_d.to("cpu").numpy()
-    confused_ids = confused_ids.to("cpu").numpy()
+    confused_ids   = confused_ids.to("cpu").numpy()
     distractor_ids = distractor_ids.to("cpu").numpy()
-    confusing_d = confusing_d.to("cpu").numpy()
+    confusing_dist =  confusing_d.to("cpu").numpy()
+    patch_row      = patch_row.to("cpu").numpy()
 
-    __save_intra(cfg.out_file, u_ids, dists, min_d, max_d)
-    __save_inter(cfg.out_file, confused_ids, distractor_ids, confusing_d)
+    __save_inter(cfg.out_file, confused_ids, distractor_ids, confusing_d, patch_row)
+
+    print(f"Saved in {cfg.out_file}*.txt")
 
 # -- Utils for mAP -- #
 def __load_dataset_for_mAP(cfg):
@@ -561,6 +610,10 @@ def get_config():
                         default=1,
                         help="Number of devices.")
 
+    parser.add_argument("--penalized",
+                        action="store_true",
+                        help="the intra distance computed will be the penalized intra distance")
+
     cfg = parser.parse_args()
 
     match cfg.task:
@@ -649,6 +702,10 @@ def get_config():
     if "distances" in cfg.task:
         map_file = __get_basename(cfg.map)
         cfg.out_file = f"{cfg.out_dir}/{map_file}-{cfg.name}"
+
+    # -- Check penalisation on intra distance -- #
+    if cfg.penalized:
+        print("\n[Warning:] the computed intra distance will be the penalized intra distance.")
         
     return cfg
 
