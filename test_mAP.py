@@ -283,34 +283,49 @@ def __mean_feats_vectorized(feats, ids, num_gpus=1, penalized=False):
 
 
 def __inter_id_dists_vectorized(feats, feat_ids, centroids, centroid_ids):
-    if feats.device.type == "cpu": feats = feats.to("cuda")
+    if feats.device.type    == "cuda": feats = feats.to("cpu")
+    if feat_ids.device.type == "cuda": feat_ids = feat_ids.to("cpu")
+
     if centroids.device.type == "cpu": centroids = centroids.to("cuda")
-
-    dist = 1 - feats @ centroids.T # Tensor size patches x ids
-
-    centroids = centroids.to("cpu")
-    feats = feats.to("cpu")
-
-    min_dist, min_indices = torch.min(dist, dim=1)
-
-    # Centroids
     if centroid_ids.device.type == "cpu": centroid_ids = centroid_ids.to("cuda")
-    predicted_closest_ids = centroid_ids[min_indices]
-    centroid_ids.to("cpu")
 
-    # Hard Positives
-    if feat_ids.device.type == "cpu": feat_ids = feat_ids.to("cuda")
-    mask = predicted_closest_ids != feat_ids
-    confused_img_ids = feat_ids[mask]
-    feat_ids = feat_ids.to("cpu")
+    confused_img_ids = []
+    patch_row        = []
+    distractor_ids   = []
+    confusing_dist   = []
 
-    patch_row = torch.argwhere(mask).squeeze(1) + 1
+    chunk_size = 23040 # or to determine
 
-    # Hard Negatives
-    distractor_ids = predicted_closest_ids[mask]
-    confusing_dist = min_dist[mask]
+    for i in range(0, feats.size(0), chunk_size):
+        batch_feats    = feats[i:i + chunk_size].to("cuda")
+        batch_feats_id = feat_ids[i:i+chunk_size].to("cuda")
 
-    return confused_img_ids, distractor_ids, confusing_dist, patch_row
+        dist = 1 - batch_feats @ centroids.T # Tensor size patches x ids
+        del batch_feats 
+
+        min_dist, min_indices = torch.min(dist, dim=1)
+        del dist
+
+        # Centroids
+        predicted_closest_ids = centroid_ids[min_indices]
+
+        # Hard Positives
+        mask = predicted_closest_ids != batch_feats_id
+
+        if mask.any():
+            confused_img_ids.append(batch_feats_id[mask])
+
+            patch_row_local = torch.argwhere(mask).squeeze(1) + 1
+            patch_row.append(patch_row_local)
+
+            # Hard Negatives
+            distractor_ids.append(predicted_closest_ids[mask])
+            confusing_dist.append(min_dist[mask])
+
+    return torch.cat(confused_img_ids), \
+           torch.cat(distractor_ids),   \
+           torch.cat(confusing_dist),   \
+           torch.cat(patch_row)
 
 def __save_intra(file, ids, dists, min_d, max_d, penalized=False):
 
@@ -334,10 +349,10 @@ def __compute_distances(cfg, feats, ids):
     
     print("Computing intra ID distances...")
     u_ids, feats_mean, dists, min_d, max_d = __mean_feats_vectorized(
-            feats, 
-            ids, 
-            num_gpus=cfg.num_devices,
-            penalized=cfg.penalized)
+        feats, 
+        ids, 
+        num_gpus=cfg.num_devices,
+        penalized=cfg.penalized)
 
     u_ids_cpu = u_ids.to("cpu").numpy()
     dists     = dists.to("cpu").numpy()
@@ -349,14 +364,14 @@ def __compute_distances(cfg, feats, ids):
 
     print("Computing inter ID distances...")
     confused_ids, distractor_ids, confusing_d, patch_row = __inter_id_dists_vectorized(
-            feats, 
-            ids, 
-            feats_mean, 
-            u_ids)
+        feats, 
+        ids, 
+        feats_mean, 
+        u_ids)
 
     confused_ids   = confused_ids.to("cpu").numpy()
     distractor_ids = distractor_ids.to("cpu").numpy()
-    confusing_dist =  confusing_d.to("cpu").numpy()
+    confusing_dist = confusing_d.to("cpu").numpy()
     patch_row      = patch_row.to("cpu").numpy()
 
     __save_inter(cfg.out_file, confused_ids, distractor_ids, confusing_d, patch_row)
@@ -695,8 +710,9 @@ def get_config():
         case _:
             raise Exception("Uknown task {cfg.task}")
     
-    if not os.path.isdir(cfg.out_dir):
-        raise ValueError(f"Output dir {cfg.out_dir} doesn't exist.")
+
+    #if not os.path.isdir(cfg.out_dir):
+    #    raise ValueError(f"Output dir {cfg.out_dir} doesn't exist.")
     
     # -- Distance Files -- #
     if "distances" in cfg.task:

@@ -193,15 +193,16 @@ class BoostTrack(object):
 
         # Get Detection Features
         if isinstance(self.embedder, EmbeddingComputer): # if FastReID
-            dets_embs = self.embedder.compute_embedding(img_numpy, dets[:, :4], tag)
+            dets_embs = self.embedder.compute_embedding(img_numpy, dets[:, :4], tag) 
 
         else:   # else if Wide Residual Network
-            ltwh = dets[:, :4]
-            ltwh[:, 2:] = ltwh[:, 2:] - ltwh[:, :2]
+            ltwh = dets[:, :4].copy()
+            ltwh[:, 2:] -= ltwh[:, :2]
             dets_embs = self.embedder(img_numpy, ltwh)
             dets_embs = dets_embs.numpy()
 
         # Get Track features
+
         trk_embs = []
         for t in range(len(self.trackers)):
             trk_embs.append(self.trackers[t].get_emb())
@@ -210,9 +211,8 @@ class BoostTrack(object):
         # Compute Cost
         if 0 == trk_embs.size:
             return None, dets_embs
-
+        
         emb_cost = dets_embs.reshape(dets_embs.shape[0], -1) @ trk_embs.reshape((trk_embs.shape[0], -1)).T
-    
         return  emb_cost, dets_embs
 
     def update_no_scale(self, dets, img_numpy, tag):

@@ -153,7 +153,9 @@ def linear_assignment(detections: np.ndarray, trackers: np.ndarray,
     # filter out matched with low IOU
     matches = []
     for m in matched_indices:
-        valid_match = iou_matrix[m[0], m[1]] >= threshold  or (False if emb_cost is None else (iou_matrix[m[0], m[1]] >= threshold / 2 and emb_cost[m[0], m[1]] >= 0.75))
+        # NOTE:
+        # Cosine distance threshold, cosine distance threshold, 0.75, best mot = 0.93
+        valid_match = iou_matrix[m[0], m[1]] >= threshold  or (False if emb_cost is None else (iou_matrix[m[0], m[1]] >= threshold / 2 and emb_cost[m[0], m[1]] >= 0.99))
         if valid_match:
             matches.append(m.reshape(1, 2))
         else:
@@ -191,6 +193,11 @@ def associate(
 
     cost_matrix = deepcopy(iou_matrix)
 
+    # NOTE: If place all the other costs at gain zero, we actually gain nothing
+    #lambda_iou = 0
+    #lambda_mhd = 0
+    #lambda_shape = 0
+
     if detection_confidence is not None and track_confidence is not None:
         conf = np.multiply(detection_confidence.reshape((-1, 1)), track_confidence.reshape((1, -1)))
         conf[iou_matrix < iou_threshold] = 0
@@ -209,6 +216,7 @@ def associate(
 
     if emb_cost is not None:
         lambda_emb = (1+lambda_iou+lambda_shape+lambda_mhd) * 1.5
-        cost_matrix += lambda_emb * emb_cost
+        #cost_matrix += lambda_emb * emb_cost
+        cost_matrix = emb_cost
 
     return linear_assignment(detections, trackers, iou_matrix, cost_matrix, iou_threshold, emb_cost)

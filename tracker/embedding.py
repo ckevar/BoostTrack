@@ -126,14 +126,16 @@ class EmbeddingComputer:
             results[:, 3] = results[:, 3].clip(0, h)
 
             crops = []
-            for p in results:
+            for p, b in zip(results, bbox):
                 crop = img[p[1] : p[3], p[0] : p[2]]
                 crop = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
                 crop = cv2.resize(crop, self.crop_size, interpolation=cv2.INTER_LINEAR).astype(np.float32)
+
                 if self.normalize:
                     crop /= 255
                     crop -= np.array((0.485, 0.456, 0.406))
                     crop /= np.array((0.229, 0.224, 0.225))
+
                 crop = torch.as_tensor(crop.transpose(2, 0, 1))
                 crop = crop.unsqueeze(0)
                 crops.append(crop)
