@@ -102,6 +102,7 @@ class EmbeddingComputer:
         if self.cache_name != tag.split(":")[0]:
             self.load_cache(tag.split(":")[0])
 
+        """
         if tag in self.cache:
             embs = self.cache[tag]
             if embs.shape[0] != bbox.shape[0]:
@@ -110,6 +111,7 @@ class EmbeddingComputer:
                     "number of detections.\nWas the detector model changed? Delete cache if so."
                 )
             return embs
+        """
 
         if self.model is None:
             self.initialize_model()

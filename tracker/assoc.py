@@ -155,7 +155,8 @@ def linear_assignment(detections: np.ndarray, trackers: np.ndarray,
     for m in matched_indices:
         # NOTE:
         # Cosine distance threshold, cosine distance threshold, 0.75, best mot = 0.93
-        valid_match = iou_matrix[m[0], m[1]] >= threshold  or (False if emb_cost is None else (iou_matrix[m[0], m[1]] >= threshold / 2 and emb_cost[m[0], m[1]] >= 0.99))
+        min_sim = 0.75
+        valid_match = iou_matrix[m[0], m[1]] >= threshold  or (False if emb_cost is None else (iou_matrix[m[0], m[1]] >= threshold / 2 and emb_cost[m[0], m[1]] >= min_sim))
         if valid_match:
             matches.append(m.reshape(1, 2))
         else:
